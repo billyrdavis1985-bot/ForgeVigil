@@ -22,6 +22,24 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     demo = commands.add_parser("demo", help="three-case smoke demonstration on temporary state")
     demo.add_argument("--assessor", choices=ASSESSORS, default="fixture")
+    demo.add_argument("--review", action="store_true", help="finish by releasing the REVIEW case as the operator")
+    review = commands.add_parser("review", help="operator decisions on REVIEW and BLOCK cases (local only)")
+    actions = review.add_subparsers(dest="action", required=True)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
+    actions.add_parser("list", parents=[common], help="show REVIEW and BLOCK cases and their decisions")
+    for action, help_text in (
+        ("release", "deliver a held REVIEW case (scope checks are re-run first)"),
+        ("reject", "close a REVIEW case without delivery"),
+        ("confirm", "confirm a BLOCK"),
+        ("false-positive", "mark a BLOCK as a false positive (nothing is delivered)"),
+    ):
+        decide = actions.add_parser(action, parents=[common], help=help_text)
+        decide.add_argument("request_id")
+        decide.add_argument("--reviewer", required=True, help="who is deciding, for example billy")
+        if action == "release":
+            decide.add_argument("--despite-threat", action="store_true",
+                                help="release even though the model flagged a threat")
     evaluate = commands.add_parser("eval", help="run the labelled evaluation cases on temporary state")
     evaluate.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     evaluate.add_argument("--json", type=Path, help="also write full results (receipts included) to this file")
@@ -29,9 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "demo":
-        return _demo(args.assessor)
+        return _demo(args.assessor, args.review)
     if args.command == "eval":
         return _eval(args.assessor, args.json, args.cases)
+    if args.command == "review":
+        return _review(args)
     return _serve(args.db, args.port, args.assessor)
 
 
@@ -47,13 +67,48 @@ def _live_config():
         return None
 
 
-def _demo(assessor: str) -> int:
+def _demo(assessor: str, with_review: bool) -> int:
     from .demo import run_demo
 
     if assessor == "fixture":
-        return run_demo()
+        return run_demo(with_review=with_review)
     config = _live_config()
-    return 2 if config is None else run_demo(live_config=config)
+    return 2 if config is None else run_demo(live_config=config, with_review=with_review)
+
+
+def _review(args) -> int:
+    import json
+    import sqlite3
+
+    from .fixtures import OPERATOR_ACTOR_ID, default_fixtures
+    from .review import ReviewError, decide, format_queue
+    from .store import Store
+
+    if not args.db.is_file():
+        print(f"refusing to run: no database at {args.db}", file=sys.stderr)
+        return 2
+    store = Store(args.db)
+    if args.action == "list":
+        print(format_queue(store.review_queue()))
+        return 0
+    try:
+        review = decide(
+            store,
+            default_fixtures(),
+            actor_id=OPERATOR_ACTOR_ID,
+            request_id=args.request_id,
+            decision=args.action.replace("-", "_"),
+            reviewer=args.reviewer,
+            despite_threat=getattr(args, "despite_threat", False),
+        )
+    except ReviewError as exc:
+        print(f"refused ({exc.code}): {exc.detail}", file=sys.stderr)
+        return 1
+    except sqlite3.Error:
+        print("failed: the database refused the write, so nothing was recorded or delivered", file=sys.stderr)
+        return 1
+    print(json.dumps(review, indent=2, sort_keys=True))
+    return 0
 
 
 def _eval(assessor: str, json_path: Path | None, case_ids: list[str] | None) -> int:

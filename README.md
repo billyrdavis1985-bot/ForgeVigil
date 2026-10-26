@@ -20,6 +20,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   run through the real service. It checks the safety rules and measures detection and false-positive rates.
   In the first live run (0.3.0), Muse flagged 6 of 7 attacks, with none delivered, and wrongly flagged
   none of the 6 benign requests. There were 2 model failures, both fixed in 0.3.1. Spend was $0.13.
+- **Checkpoint 04:** operator review, the human side of the system. `review release` delivers a held
+  REVIEW case after re-running the scope checks; BLOCK cases can only be confirmed or marked as false
+  positives. Every decision gets its own receipt. Review is a local command only, never over HTTP.
 
 Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
 evaluation), the model's own resistance to prompt injection, and readiness for hosting.
@@ -27,9 +30,10 @@ evaluation), the model's own resistance to prompt injection, and readiness for h
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 44 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 55 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
+python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -127,6 +131,31 @@ shape. A case only counts as correct when its disposition is right *and* the mod
 Use `--case <id>` (repeatable) to re-run only the cases you care about, for example
 `eval --assessor muse --case attack-impersonation`.
 
+## Operator review (Checkpoint 04)
+
+REVIEW means "held for a human", and the `review` command is where that human decides. It works on the
+database `serve` writes (default `var/forgevigil.sqlite3`; use `--db` for another):
+
+```powershell
+.\.venv\Scripts\python.exe -m forge_vigil review list
+.\.venv\Scripts\python.exe -m forge_vigil review release <request_id> --reviewer billy
+.\.venv\Scripts\python.exe -m forge_vigil review reject <request_id> --reviewer billy
+.\.venv\Scripts\python.exe -m forge_vigil review confirm <request_id> --reviewer billy
+.\.venv\Scripts\python.exe -m forge_vigil review false-positive <request_id> --reviewer billy
+```
+
+| Held as | Allowed decisions | Delivery |
+|---|---|---|
+| REVIEW | `release` or `reject` | `release` delivers the approved document once, after re-checking actor, document and recipient against current server data |
+| BLOCK | `confirm` or `false-positive` | never; `false-positive` marks the finding as wrong, which is tuning data |
+| ALLOW, DENY | none (final) | — |
+
+The rules behind it:
+- **Override for flagged requests:** releasing a request the model flagged as a threat requires `--despite-threat`.
+- **One decision per request:** each request takes at most one decision, and the decision and its delivery are written in one transaction.
+- **Original receipts never change:** the decision is an append-only review record linked to the original receipt. It names the reviewer, the decision, the re-check result and the delivery ID.
+- **Local only:** review is never exposed over HTTP, so a requester can't release its own held request, and the model has no tool for it.
+
 ## API
 
 `POST /v1/requests` with `Authorization: Bearer <token>` and `Content-Type: application/json`:
@@ -184,6 +213,7 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/http_api.py` | localhost HTTP adapter, bearer authentication, transport limits |
 | `forge_vigil/demo.py` | the smoke demo, with fixture and live modes |
 | `forge_vigil/evaluation.py`, `eval_cases.json` | the labelled evaluation and its 16 fictional cases |
+| `forge_vigil/review.py` | operator review: release, reject, confirm or mark false positives on held cases |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).

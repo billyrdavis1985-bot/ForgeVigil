@@ -101,12 +101,41 @@ _SCHEMA = (
        BEGIN SELECT RAISE(ABORT, 'resolved spend entries are final'); END""",
     """CREATE TRIGGER IF NOT EXISTS spend_ledger_no_delete BEFORE DELETE ON spend_ledger
        BEGIN SELECT RAISE(ABORT, 'spend entries are retained'); END""",
+    # Store schema 3: operator review decisions, at most one per request.
+    """CREATE TABLE IF NOT EXISTS reviews (
+        review_id TEXT PRIMARY KEY,
+        actor_id TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        original_receipt_id TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('release', 'reject', 'confirm', 'false_positive')),
+        reviewer TEXT NOT NULL,
+        review_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (actor_id, request_id),
+        FOREIGN KEY (actor_id, request_id) REFERENCES requests (actor_id, request_id),
+        FOREIGN KEY (original_receipt_id) REFERENCES receipts (receipt_id)
+    )""",
+    """CREATE TRIGGER IF NOT EXISTS reviews_no_update BEFORE UPDATE ON reviews
+       BEGIN SELECT RAISE(ABORT, 'review decisions are append-only'); END""",
+    """CREATE TRIGGER IF NOT EXISTS reviews_no_delete BEFORE DELETE ON reviews
+       BEGIN SELECT RAISE(ABORT, 'review decisions are append-only'); END""",
 )
-_MIGRATABLE_VERSIONS = (None, "1", STORE_SCHEMA_VERSION)  # 1 -> 2 only adds the spend ledger
+# Every upgrade so far only adds tables: 1 -> 2 the spend ledger, 2 -> 3 operator reviews.
+_MIGRATABLE_VERSIONS = (None, "1", "2", STORE_SCHEMA_VERSION)
+# Which operator decisions each held disposition accepts. Only REVIEW can ever be released.
+REVIEW_DECISIONS = {"REVIEW": ("release", "reject"), "BLOCK": ("confirm", "false_positive")}
 
 
 class AttemptNotCurrent(Exception):
     """The claimed attempt no longer owns the request; nothing was written."""
+
+
+class ReviewRefused(Exception):
+    """A review decision conflicts with recorded state; nothing was written."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -319,6 +348,72 @@ class Store:
                 "SELECT receipt_json FROM receipts WHERE actor_id = ? AND request_id = ?", (actor_id, request_id)
             ).fetchone()
         return json.loads(row[0]) if row else None
+
+    def record_review(self, review: dict, outbox: OutboxItem | None) -> None:
+        """Atomically record an operator decision and, for a release, its single outbox item.
+
+        The checks are repeated here, inside the transaction, so a race or a
+        caller bug cannot release anything but an undecided REVIEW receipt.
+        """
+        releasing = review["decision"] == "release"
+        if (outbox is not None) != releasing:
+            raise ValueError("an outbox item requires a release decision, and a release requires one")
+        if outbox is not None and review["effect_id"] != outbox.effect_id:
+            raise ValueError("review effect_id does not match the outbox item")
+        review_json = json.dumps(review, sort_keys=True, separators=(",", ":"))
+        key = (review["actor_id"], review["request_id"])
+        with self._transaction() as conn:
+            row = conn.execute(
+                "SELECT receipt_id, disposition FROM receipts WHERE actor_id = ? AND request_id = ?", key
+            ).fetchone()
+            if row is None or row[0] != review["original_receipt_id"]:
+                raise ReviewRefused("not_found", "no matching receipt for this request")
+            if review["decision"] not in REVIEW_DECISIONS.get(row[1], ()):
+                raise ReviewRefused("decision_not_allowed", f"{review['decision']} is not allowed for a {row[1]} receipt")
+            if conn.execute("SELECT 1 FROM reviews WHERE actor_id = ? AND request_id = ?", key).fetchone():
+                raise ReviewRefused("already_decided", "this request already has a review decision")
+            if outbox is not None:
+                # The UNIQUE (actor_id, request_id) constraint still caps every request at one delivery.
+                conn.execute(
+                    f"INSERT INTO outbox ({_OUTBOX_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        outbox.effect_id,
+                        outbox.actor_id,
+                        outbox.request_id,
+                        outbox.document_id,
+                        outbox.recipient_id,
+                        outbox.recipient_address,
+                        outbox.body,
+                        outbox.body_sha256,
+                        outbox.created_at,
+                    ),
+                )
+                self._notify("release_outbox_inserted")
+            conn.execute(
+                "INSERT INTO reviews (review_id, actor_id, request_id, original_receipt_id, decision, reviewer, "
+                "review_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    review["review_id"],
+                    review["actor_id"],
+                    review["request_id"],
+                    review["original_receipt_id"],
+                    review["decision"],
+                    review["reviewer"],
+                    review_json,
+                    review["decided_at"],
+                ),
+            )
+        self._notify("review_committed")
+
+    def review_queue(self) -> list[tuple[dict, dict | None]]:
+        """REVIEW and BLOCK receipts, oldest first, each paired with its decision if one exists."""
+        with self._reader() as conn:
+            rows = conn.execute(
+                "SELECT r.receipt_json, v.review_json FROM receipts r LEFT JOIN reviews v "
+                "ON v.actor_id = r.actor_id AND v.request_id = r.request_id "
+                "WHERE r.disposition IN ('REVIEW', 'BLOCK') ORDER BY r.created_at, r.receipt_id"
+            ).fetchall()
+        return [(json.loads(receipt), json.loads(review) if review else None) for receipt, review in rows]
 
     def incomplete_requests(self) -> list[Claim]:
         with self._reader() as conn:

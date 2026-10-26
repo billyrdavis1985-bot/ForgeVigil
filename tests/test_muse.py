@@ -26,6 +26,7 @@ from forge_vigil.muse import MuseAssessor, MuseConfig
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService
 from forge_vigil.store import Store
+from forge_vigil.versions import STORE_SCHEMA_VERSION
 from tests import fake_muse as fake
 from tests.support import db_execute, dump_all_rows, valid_payload
 
@@ -368,7 +369,7 @@ class SpendControlTests(_MuseTest):
         db_execute(path, "DROP TABLE spend_ledger")  # back to the Checkpoint 01 layout
         db_execute(path, "UPDATE meta SET value = '1' WHERE key = 'store_schema'")
         self.assertEqual(Store(path).spend_entries(), [])
-        self.assertEqual(schema_version(path), "2")
+        self.assertEqual(schema_version(path), STORE_SCHEMA_VERSION)
 
         db_execute(path, "UPDATE meta SET value = '9' WHERE key = 'store_schema'")
         with self.assertRaises(RuntimeError):

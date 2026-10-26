@@ -20,6 +20,8 @@ Operator instructions take precedence over this file.
   Do not print or dump environment variables.
 - Model or assessor output is advice only and never grants a capability. Only deterministic code in
   `forge_vigil/policy.py` can produce ALLOW.
+- Releasing a held request is an operator action through the local `review` command only (`forge_vigil/review.py`).
+  Never expose it over HTTP or as a model tool, and never let it release a BLOCK or DENY result.
 - Delivery means a row in the local SQLite outbox and nothing else. Do not add network, mail, shell or
   arbitrary filesystem effects unless a checkpoint assigns them.
 - Never weaken a test expectation to make the suite pass. Keep evidence of failures.

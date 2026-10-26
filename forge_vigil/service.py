@@ -85,6 +85,26 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+def build_outbox_item(
+    fixtures: FixtureSet, actor_id: str, request_id: str, document_id: str, recipient_id: str
+) -> OutboxItem:
+    """The only way a delivery is built. The body is always the approved server-owned
+    document, never request text; callers must have passed the scope checks first."""
+    document = fixtures.documents[document_id]
+    recipient = fixtures.recipients[recipient_id]
+    return OutboxItem(
+        effect_id="fx_" + uuid.uuid4().hex,
+        actor_id=actor_id,
+        request_id=request_id,
+        document_id=document.document_id,
+        recipient_id=recipient.recipient_id,
+        recipient_address=recipient.address,
+        body=document.content,
+        body_sha256=hashlib.sha256(document.content).hexdigest(),
+        created_at=utc_now(),
+    )
+
+
 class ForgeVigilService:
     def __init__(self, store: Store, assessor: Assessor, fixtures: FixtureSet | None = None) -> None:
         self.store = store
@@ -284,20 +304,7 @@ class ForgeVigilService:
         }
 
     def _outbox_item(self, claim: Claim) -> OutboxItem:
-        # The body is always the approved server-owned document, never request text.
-        document = self.fixtures.documents[claim.document_id]
-        recipient = self.fixtures.recipients[claim.recipient_id]
-        return OutboxItem(
-            effect_id="fx_" + uuid.uuid4().hex,
-            actor_id=claim.actor_id,
-            request_id=claim.request_id,
-            document_id=document.document_id,
-            recipient_id=recipient.recipient_id,
-            recipient_address=recipient.address,
-            body=document.content,
-            body_sha256=hashlib.sha256(document.content).hexdigest(),
-            created_at=utc_now(),
-        )
+        return build_outbox_item(self.fixtures, claim.actor_id, claim.request_id, claim.document_id, claim.recipient_id)
 
     def _receipt(
         self,

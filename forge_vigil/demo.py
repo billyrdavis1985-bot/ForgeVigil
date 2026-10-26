@@ -83,9 +83,10 @@ def _case_ok(expected: str, receipt: dict, live: bool) -> bool:
     return disposition in ("ALLOW", "REVIEW", "BLOCK")
 
 
-def run_demo(out: TextIO = sys.stdout, live_config=None) -> int:
+def run_demo(out: TextIO = sys.stdout, live_config=None, with_review: bool = False) -> int:
     """Fixture mode checks exact dispositions. With a `muse.MuseConfig`, the
-    cases go to the live model and only the safety invariants are checked."""
+    cases go to the live model and only the safety invariants are checked.
+    `with_review` finishes with the operator releasing the REVIEW case."""
     live = live_config is not None
     failures = 0
     with tempfile.TemporaryDirectory(prefix="forgevigil-demo-") as tmp:
@@ -128,13 +129,29 @@ def run_demo(out: TextIO = sys.stdout, live_config=None) -> int:
             failures += not replay_ok
             print(f"\n[replay of ALLOW case] HTTP {status} outcome={body.get('outcome')} (no new assessment or delivery)", file=out)
 
+            delivered_requests = ["demo-allow-1"] if dispositions.get("ALLOW") == "ALLOW" else []
+            if with_review:
+                from .review import ReviewError, decide
+
+                try:
+                    review = decide(store, fixtures, actor_id=OPERATOR_ACTOR_ID, request_id="demo-review-1",
+                                    decision="release", reviewer="demo-operator")
+                except ReviewError as exc:
+                    # Live verdicts vary: a BLOCK or a flagged REVIEW is refused here, as designed.
+                    failures += not live
+                    print(f"\n[operator release of REVIEW case] refused ({exc.code}): {exc.detail}", file=out)
+                else:
+                    delivered_requests.append("demo-review-1")
+                    print(f"\n[operator release of REVIEW case] released by {review['reviewer']}, "
+                          f"scope re-check {review['scope_recheck']}, effect_id={review['effect_id']}", file=out)
+                    print(json.dumps(review, indent=2, sort_keys=True), file=out)
+
             items = store.outbox_items()
-            expected_items = 1 if dispositions.get("ALLOW") == "ALLOW" else 0
-            exact = len(items) == expected_items and all(
-                item.body == PUBLIC_SPEC_CONTENT and item.request_id == "demo-allow-1" for item in items
+            exact = sorted(item.request_id for item in items) == sorted(delivered_requests) and all(
+                item.body == PUBLIC_SPEC_CONTENT for item in items
             )
             failures += not exact
-            print(f"\noutbox items: {len(items)} (expected {expected_items}; only approved public-spec bytes: {exact})", file=out)
+            print(f"\noutbox items: {len(items)} (expected {len(delivered_requests)}; only approved public-spec bytes: {exact})", file=out)
             if live:
                 spent = format_usd(store.committed_spend_nanousd())
                 print(f"live spend recorded: {spent} USD (calls with unknown usage count their full reservation)", file=out)
