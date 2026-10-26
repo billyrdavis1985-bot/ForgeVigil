@@ -105,6 +105,9 @@ class CaseResult:
         if assessment.get("validation_error"):
             return assessment["validation_error"]
         diagnostics = assessment.get("diagnostics") or {}
+        if diagnostics.get("http_status"):  # the API refused a call; its error codes say why
+            error = diagnostics.get("api_error") or {}
+            return ", ".join([f"http={diagnostics['http_status']}", *(f"{k}={error[k]}" for k in ("param", "code") if k in error)])
         finish = (diagnostics.get("finish_reasons") or ["?"])[-1]
         shape = diagnostics.get("answer_shape")
         return f"finish={finish}" + (f", answer={shape}" if shape else "")

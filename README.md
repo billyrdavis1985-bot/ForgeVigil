@@ -31,6 +31,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 06:** measuring the model properly. The evaluation grows from 16 to 43 cases, many of them
   benign requests that sound alarming. `eval --repeat N` shows which verdicts change from run to run.
   `review export` turns your decisions into labelled cases.
+  The first live run (0.6.0) blocked 17 of 19 attacks with confirmed evidence, delivered none, and wrongly
+  flagged none of the 17 benign requests. Spend was $0.42. 0.6.1 fixes the one model failure: the
+  cut-off retry sent a `tool_choice` value that Meta's API rejects.
 
 Not established yet: Muse's detection quality and false-positive rate at a meaningful scale (43 cases
 is still small, and verdicts vary between runs), the model's own resistance to prompt injection beyond
@@ -39,7 +42,7 @@ these cases, and readiness for hosting.
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 70 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 71 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -86,10 +89,12 @@ At the end it prints the spend that was recorded.
 1. Code denies out-of-scope actors, documents and recipients before Muse is ever called.
 2. Muse receives the request as JSON-encoded, untrusted data. It may call three read-only tools:
    `lookup_approval`, `get_document_facts` and `get_recipient_facts`. After 4 tool calls or 4 model calls
-   it must answer.
+   it must answer. Meta's API accepts only `tool_choice: "auto"`, so Muse is told in words when tools are
+   over, and code refuses any further tool call without running it.
 3. Its answer must match a strict JSON schema. Code sets the schema and status fields; the model never does.
    If an answer is cut off at the output cap, Muse gets one more call, with no tools, asking for just the
-   JSON. That call is budget-reserved like the others and counts toward the 4-call limit.
+   JSON with `reasoning_effort: "low"`. That call is budget-reserved like the others and counts toward the
+   4-call limit.
 4. **False-positive check:** a threat finding only becomes BLOCK if code can confirm everything it cites.
    Quotes must appear in the request. Registry, document and recipient claims must match the server's
    facts. The finding must cite something the requester actually wrote. Anything else goes to REVIEW
@@ -101,8 +106,9 @@ At the end it prints the spend that was recorded.
    its estimate (for example through hidden reasoning tokens); any overrun is recorded at its actual cost.
 6. **Receipt:** it records the adapter and prompt version, every evidence-check result (quotes as hashes
    only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
-   reasons, reply field names, and whether the answer was JSON, fenced JSON, empty, cut off or prose. The
-   model's text itself is never stored.
+   reasons, reply field names, and whether the answer was JSON, fenced JSON, empty, cut off or prose. If
+   the API refuses a call, it records the HTTP status and the error's `type`, `code` and `param`, kept only
+   when each is a short identifier. The model's text and the API's error message are never stored.
 
 **Transport rules:**
 - HTTPS only. Plain HTTP is allowed only for a loopback test server.

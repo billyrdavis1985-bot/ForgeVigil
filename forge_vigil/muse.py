@@ -42,12 +42,19 @@ DEFAULT_INPUT_USD_PER_MILLION = "1.25"
 DEFAULT_OUTPUT_USD_PER_MILLION = "4.25"
 # Reasoning counts as output: live runs used ~900-1,700 tokens per call, and one hard case passed 2,048.
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
-PROMPT_VERSION = "cp02.muse-assessor.v3"
+PROMPT_VERSION = "cp02.muse-assessor.v4"
 # Sent once when an answer is cut off at the output cap; reasoning length varies run to run.
 TRUNCATION_RETRY_PROMPT = (
     "Your previous reply was cut off before the JSON object was complete. "
-    "Reply now with only the JSON object, and keep any reasoning brief."
+    "Reply now with only the JSON object, and keep any reasoning brief. Do not call any tools."
 )
+# Meta's API accepts only tool_choice "auto" (live run 8 got HTTP 400 for "none"), so when the
+# tools are used up the model is told in words, and code refuses any further tool call.
+ANSWER_NOW_PROMPT = "You have used all available tool calls. Reply now with only the JSON object. Do not call any tools."
+# The retry asks for less reasoning, since too much reasoning is what cut the first answer off.
+RETRY_REASONING_EFFORT = "low"
+# Only short code-like values are kept from an API error body; its message text never is.
+_ERROR_IDENTIFIER = re.compile(r"[A-Za-z0-9_.\[\]-]{1,64}")  # e.g. tool_choice, messages[1].content
 MAX_TOOL_ARGUMENT_CHARS = 2048
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,39}")
@@ -173,10 +180,27 @@ class MuseConfig:
 
 
 class TransportError(Exception):
-    def __init__(self, kind: str, status: int | None = None) -> None:
+    def __init__(self, kind: str, status: int | None = None, api_error: dict | None = None) -> None:
         super().__init__(kind if status is None else f"{kind}:{status}")
         self.kind = kind
         self.status = status
+        self.api_error = api_error  # identifier-only fields from the error body, or None
+
+
+def _api_error_fields(data: bytes) -> dict | None:
+    """type, code and param from an OpenAI-style error body, each kept only if it is a short identifier."""
+    try:
+        error = json.loads(data).get("error")
+    except (ValueError, RecursionError, AttributeError):
+        return None
+    if not isinstance(error, dict):
+        return None
+    fields = {
+        key: error[key]
+        for key in ("type", "code", "param")
+        if isinstance(error.get(key), str) and _ERROR_IDENTIFIER.fullmatch(error[key])
+    }
+    return fields or None
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -198,8 +222,13 @@ class UrllibTransport:
             with opener.open(request, timeout=timeout) as response:
                 data = response.read(max_bytes + 1)
         except urllib.error.HTTPError as exc:
-            exc.close()
-            raise TransportError("http_error", exc.code) from None
+            try:
+                api_error = _api_error_fields(exc.read(4096))
+            except (OSError, http.client.HTTPException):
+                api_error = None
+            finally:
+                exc.close()
+            raise TransportError("http_error", exc.code, api_error) from None
         except urllib.error.URLError as exc:
             raise TransportError("timeout" if isinstance(exc.reason, TimeoutError) else "network") from None
         except TimeoutError:
@@ -247,6 +276,8 @@ class _Meter:
         self.answer_shape: str | None = None
         self.answer_chars: int | None = None
         self.answer_retries = 0
+        self.http_status: int | None = None
+        self.api_error: dict | None = None
 
     def observe(self, response: object, message: dict | None) -> None:
         choices = response.get("choices") if isinstance(response, dict) else None
@@ -264,6 +295,8 @@ class _Meter:
             "answer_shape": self.answer_shape,
             "answer_chars": self.answer_chars,
             "answer_retries": self.answer_retries,
+            "http_status": self.http_status,
+            "api_error": self.api_error,
         }
 
     def record(self, input_tokens: int, output_tokens: int, cost_nanousd: int) -> None:
@@ -364,6 +397,7 @@ class MuseAssessor:
             {"role": "user", "content": _request_as_data(item)},
         ]
         meter = _Meter()
+        told_to_answer = False
         for call_number in range(1, config.max_model_calls + 1):
             # Once tool calls or model calls run out, or after a retry, the model must answer.
             tools_allowed = (
@@ -371,7 +405,11 @@ class MuseAssessor:
                 and meter.tool_calls < config.max_tool_calls
                 and call_number < config.max_model_calls
             )
-            result = self._call(item, self._body(messages, tools_allowed), meter)
+            if not tools_allowed and not meter.answer_retries and not told_to_answer:
+                messages.append({"role": "user", "content": ANSWER_NOW_PROMPT})
+                told_to_answer = True
+            effort = RETRY_REASONING_EFFORT if meter.answer_retries else None
+            result = self._call(item, self._body(messages, effort), meter)
             if isinstance(result, str):
                 return self._fail(meter, result)
             calls = result.get("tool_calls")
@@ -399,18 +437,20 @@ class MuseAssessor:
     def _fail(meter: _Meter, code: str) -> AssessorReply:
         return AssessorReply(None, meter.usage(), code, meter.diagnostics())
 
-    def _body(self, messages: list[dict], tools_allowed: bool) -> bytes:
+    def _body(self, messages: list[dict], reasoning_effort: str | None = None) -> bytes:
         payload = {
             "model": self.config.model,
             "messages": messages,
             "tools": list(TOOL_SPECS),
-            "tool_choice": "auto" if tools_allowed else "none",
+            "tool_choice": "auto",  # the only value Meta's API accepts; code enforces when tools are over
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": "forgevigil_assessment", "strict": True, "schema": ANSWER_SCHEMA},
             },
             "max_tokens": self.config.max_output_tokens,
         }
+        if reasoning_effort is not None:
+            payload["reasoning_effort"] = reasoning_effort
         return json.dumps(payload).encode("ascii")  # ASCII escapes only enlarge the token bound
 
     def _headers(self) -> dict:
@@ -443,6 +483,7 @@ class MuseAssessor:
             # The provider may still have processed and billed the call.
             self._store.mark_spend_unknown(reservation, resolved_at=utc_now())
             meter.record_unknown()
+            meter.http_status, meter.api_error = exc.status, exc.api_error
             return _transport_failure(exc)
         except BaseException:
             self._store.mark_spend_unknown(reservation, resolved_at=utc_now())

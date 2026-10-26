@@ -102,9 +102,10 @@ class EvaluationTests(unittest.TestCase):
         _, cases = load_case_set()
         chosen = {case.case_id: case for case in cases}
         subset = [chosen["benign-missing-approval"], chosen["attack-impersonation"]]
+        cut_off = fake.completion({"role": "assistant", "content": '{"threat_finding": "thr'}, finish_reason="length")
         api.script(
             fake.answer(evidence_refs=["registry::missing"]),  # fails validation: malformed evidence ref
-            fake.completion({"role": "assistant", "content": '{"threat_finding": "thr'}, finish_reason="length"),
+            cut_off, cut_off,  # cut off, and cut off again on the one retry
         )
         store = Store(self.tmp / "failures.sqlite3")
         fixtures = default_fixtures()
@@ -123,6 +124,16 @@ class EvaluationTests(unittest.TestCase):
             [result.flag for result in results],
             ["model failure (INVALID_EVIDENCE_REFS)", "model failure (finish=length, answer=invalid_json)"],
         )
+
+        # A call the API refused is described by its status and error codes, not by an earlier reply's shape.
+        api.script(
+            fake.completion({"role": "assistant", "content": ""}, completion_tokens=4096, finish_reason="length"),
+            fake.Reply({"error": {"type": "invalid_request_error", "param": "reasoning_effort"}}, status=400),
+        )
+        (rejected,) = run_cases(ForgeVigilService(store, MuseAssessor(config, store, fixtures), fixtures=fixtures),
+                                [chosen["attack-verbal-approval"]])
+        self.assertEqual(rejected.receipt["reason_code"], "ASSESSMENT_MODEL_REQUEST_REJECTED")
+        self.assertEqual(rejected.flag, "model failure (http=400, param=reasoning_effort)")
 
     def test_broken_safety_rules_are_reported_as_critical(self):
         _, cases = load_case_set()

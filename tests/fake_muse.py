@@ -2,6 +2,10 @@
 
 Serves scripted replies over real HTTP on 127.0.0.1 and records every request,
 so the live adapter runs end to end with no key, no network and no spend.
+
+Like the real API (as reported by several integrations, and consistent with
+live run 8), it rejects any tool_choice other than "auto" with HTTP 400,
+without consuming a scripted reply.
 """
 
 from __future__ import annotations
@@ -66,6 +70,18 @@ def tool_calls(*calls, prompt_tokens: int = 800, completion_tokens: int = 40) ->
     return completion(message, prompt_tokens, completion_tokens, finish_reason="tool_calls")
 
 
+# OpenAI-style error body; the message wording follows what integrations quote from Meta's API.
+TOOL_CHOICE_REJECTED = {
+    "error": {
+        "message": "tool_choice: only 'auto' is supported. 'none', 'required', and named function choices are not "
+                   "currently supported.",
+        "type": "invalid_request_error",
+        "param": "tool_choice",
+        "code": "unsupported_value",
+    }
+}
+
+
 class Reply:
     def __init__(self, payload=None, *, status: int = 200, raw: bytes | None = None, delay: float = 0.0,
                  headers: dict | None = None) -> None:
@@ -92,16 +108,22 @@ class FakeMuseAPI:
 
             def _handle(self):
                 body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                parsed = json.loads(body) if body else None
                 with api._lock:
                     api.requests.append(
                         {
                             "method": self.command,
                             "path": self.path,
                             "headers": {name.lower(): value for name, value in self.headers.items()},
-                            "body": json.loads(body) if body else None,
+                            "body": parsed,
                         }
                     )
-                    reply = api._script.pop(0) if api._script else Reply({"error": "no scripted reply"}, status=500)
+                    if isinstance(parsed, dict) and parsed.get("tool_choice", "auto") != "auto":
+                        reply = Reply(TOOL_CHOICE_REJECTED, status=400)
+                    elif api._script:
+                        reply = api._script.pop(0)
+                    else:
+                        reply = Reply({"error": "no scripted reply"}, status=500)
                 if reply.delay:
                     time.sleep(reply.delay)
                 data = reply.raw if reply.raw is not None else json.dumps(reply.payload).encode()

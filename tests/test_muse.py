@@ -22,7 +22,7 @@ from forge_vigil.budget import parse_usd
 from forge_vigil.demo import run_demo
 from forge_vigil.errors import ConfigError
 from forge_vigil.fixtures import default_fixtures
-from forge_vigil.muse import TRUNCATION_RETRY_PROMPT, MuseAssessor, MuseConfig
+from forge_vigil.muse import ANSWER_NOW_PROMPT, TRUNCATION_RETRY_PROMPT, MuseAssessor, MuseConfig
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService
 from forge_vigil.store import Store
@@ -71,7 +71,7 @@ class LiveAssessorTests(_MuseTest):
         self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("ALLOW", "ALL_CHECKS_PASSED"))
         self.assertEqual(service.assessor_mode, "live")  # what GET /health reports
         self.assertEqual(receipt["assessment"]["adapter_id"], "muse.muse-spark-1.1")
-        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v3")
+        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v4")
         # 1000 x $1.25/M + 100 x $4.25/M = $0.001675
         self.assertEqual(
             receipt["usage"],
@@ -258,10 +258,20 @@ class LiveAssessorTests(_MuseTest):
         )
         retry = self.api.requests[2]["body"]
         self.assertEqual(retry["messages"][-1], {"role": "user", "content": TRUNCATION_RETRY_PROMPT})
-        self.assertEqual(retry["tool_choice"], "none")  # the retry asks for the answer only
+        # Meta's API accepts only tool_choice "auto"; the retry asks for less reasoning instead.
+        self.assertEqual([r["body"]["tool_choice"] for r in self.api.requests], ["auto"] * 3)
+        self.assertEqual([r["body"].get("reasoning_effort") for r in self.api.requests], [None, None, "low"])
         # All three calls are metered: 800 + 1000 + 1000 input, 40 + 4096 + 100 output tokens.
         self.assertEqual((receipt["usage"]["input_tokens"], receipt["usage"]["output_tokens"]), (2800, 4236))
         self.assertEqual([entry["state"] for entry in service.store.spend_entries()], ["settled"] * 3)
+
+        # Code, not the API flag, keeps tools off after a retry: a tool call there ends the assessment unrun.
+        self.api.requests.clear()
+        self.api.script(cut_off, fake.tool_calls(("get_recipient_facts", {"recipient_id": "supplier"})))
+        receipt = self.submit(self.service(db_name="retry-tool.sqlite3"))
+        self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("REVIEW", "ASSESSMENT_TOOL_LIMIT_EXCEEDED"))
+        self.assertEqual(len(self.api.requests), 2)
+        self.assertEqual(receipt["assessment"]["diagnostics"]["tool_calls"], 0)
 
     def test_clean_answers_may_cite_nothing_but_threats_must_cite_evidence(self):
         self.api.script(fake.answer(evidence_refs=[]))
@@ -298,7 +308,10 @@ class LiveAssessorTests(_MuseTest):
         )
         receipt = self.submit(self.service(db_name="limits.sqlite3"))
         self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("REVIEW", "ASSESSMENT_TOOL_LIMIT_EXCEEDED"))
-        self.assertEqual(self.api.requests[-1]["body"]["tool_choice"], "none")
+        final = self.api.requests[-1]["body"]
+        # Meta's API accepts only "auto", so the model is told in words and code refuses the extra call.
+        self.assertEqual((final["tool_choice"], final["messages"][-1]["content"]), ("auto", ANSWER_NOW_PROMPT))
+        self.assertEqual(receipt["assessment"]["diagnostics"]["tool_calls"], 4)
         self.assertEqual(receipt["usage"]["status"], "metered")
 
     def test_transport_failures_hold_for_review_and_count_spend_conservatively(self):
@@ -330,6 +343,22 @@ class LiveAssessorTests(_MuseTest):
                 self.assertEqual(entry["state"], ledger_state)
                 if ledger_state == "unknown":  # unknown usage stays charged at the full reservation
                     self.assertEqual(service.store.committed_spend_nanousd(), entry["reserved_nanousd"])
+
+    def test_rejected_requests_record_error_codes_but_never_error_text(self):
+        echo = valid_payload()["message"]
+        body = {"error": {"message": f"Invalid request near: {echo}", "type": "invalid_request_error",
+                          "param": "messages[1].content", "code": "has spaces so dropped"}}
+        self.api.script(fake.Reply(body, status=400))
+        service = self.service()
+        receipt = self.submit(service)
+        self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("REVIEW", "ASSESSMENT_MODEL_REQUEST_REJECTED"))
+        diagnostics = receipt["assessment"]["diagnostics"]
+        self.assertEqual(
+            (diagnostics["http_status"], diagnostics["api_error"]),
+            (400, {"type": "invalid_request_error", "param": "messages[1].content"}),
+        )
+        self.assertNotIn("Invalid request near", json.dumps(receipt))
+        self.assertNotIn("has spaces", dump_all_rows(self.tmp / "state.sqlite3"))
 
     def test_redirects_are_refused_so_the_key_is_never_forwarded(self):
         collector = fake.FakeMuseAPI()
