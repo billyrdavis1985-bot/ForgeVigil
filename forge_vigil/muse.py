@@ -445,6 +445,10 @@ class MuseAssessor:
         return message if message is not None else "MODEL_RESPONSE_MALFORMED"
 
     def _answer(self, message: dict, meter: _Meter) -> AssessorReply:
+        refusal = message.get("refusal")
+        if isinstance(refusal, str) and refusal.strip():
+            meter.answer_shape, meter.answer_chars = "refusal", len(refusal)
+            return self._fail(meter, "MODEL_REFUSED")
         content = message.get("content")
         parsed, meter.answer_shape = _parse_answer(content)
         meter.answer_chars = len(content) if isinstance(content, str) else 0

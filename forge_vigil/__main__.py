@@ -1,6 +1,6 @@
-"""Command line: `python3 -m forge_vigil serve` or `python3 -m forge_vigil demo`.
+"""Command line: `python3 -m forge_vigil serve`, `demo` or `eval`.
 
-Both default to the fixture assessor. `--assessor muse` uses the live Meta
+All default to the fixture assessor. `--assessor muse` uses the live Meta
 Model API and needs MODEL_API_KEY and FORGEVIGIL_SPEND_CAP_USD in the environment.
 """
 
@@ -22,10 +22,15 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     demo = commands.add_parser("demo", help="three-case smoke demonstration on temporary state")
     demo.add_argument("--assessor", choices=ASSESSORS, default="fixture")
+    evaluate = commands.add_parser("eval", help="run the labelled evaluation cases on temporary state")
+    evaluate.add_argument("--assessor", choices=ASSESSORS, default="fixture")
+    evaluate.add_argument("--json", type=Path, help="also write full results (receipts included) to this file")
     args = parser.parse_args(argv)
 
     if args.command == "demo":
         return _demo(args.assessor)
+    if args.command == "eval":
+        return _eval(args.assessor, args.json)
     return _serve(args.db, args.port, args.assessor)
 
 
@@ -48,6 +53,15 @@ def _demo(assessor: str) -> int:
         return run_demo()
     config = _live_config()
     return 2 if config is None else run_demo(live_config=config)
+
+
+def _eval(assessor: str, json_path: Path | None) -> int:
+    from .evaluation import run_evaluation
+
+    if assessor == "fixture":
+        return run_evaluation(json_path=json_path)
+    config = _live_config()
+    return 2 if config is None else run_evaluation(live_config=config, json_path=json_path)
 
 
 def _serve(db_path: Path, port: int, assessor_kind: str) -> int:

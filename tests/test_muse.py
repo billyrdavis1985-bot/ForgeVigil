@@ -214,6 +214,10 @@ class LiveAssessorTests(_MuseTest):
                 fake.completion({"role": "assistant", "content": "[1, 2]"}),
                 "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "json_not_object", "stop", plain,
             ),
+            "refusal": (
+                fake.completion({"role": "assistant", "content": None, "refusal": "I can't help with that."}),
+                "ASSESSMENT_MODEL_REFUSED", "refusal", "stop", ["content", "refusal", "role"],
+            ),
         }
         for index, (name, (reply, reason, shape, finish, fields)) in enumerate(cases.items()):
             with self.subTest(name):

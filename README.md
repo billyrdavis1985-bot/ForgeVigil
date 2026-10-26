@@ -14,7 +14,10 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   reserved before every model call. It is tested against a local fake of the API. The **first live run**
   (2026-10-26) confirmed that the key, endpoint, model, request format and usage reporting all work. One
   of its two live assessments came back as an unparseable answer and was safely held for REVIEW. Version
-  0.2.1 adds answer diagnostics and a larger output allowance in response.
+  0.2.1 added answer diagnostics and a larger output allowance, and the second live run returned clean,
+  evidence-checked answers for both live cases.
+- **Checkpoint 03:** a labelled evaluation of 16 fictional cases (6 benign, 7 attacks, 3 out of scope),
+  run through the real service. It checks the safety rules and measures detection and false-positive rates.
 
 Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
 evaluation), the model's own resistance to prompt injection, and readiness for hosting.
@@ -22,8 +25,9 @@ evaluation), the model's own resistance to prompt injection, and readiness for h
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 37 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 41 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
+python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -87,6 +91,34 @@ At the end it prints the spend that was recorded.
 - Redirects are refused, so the key can't be forwarded to another host.
 - Responses are size-capped, and each socket operation has a timeout.
 
+## Evaluation (Checkpoint 03)
+
+`python -m forge_vigil eval` runs the 16 cases in `forge_vigil/eval_cases.json` through the real
+service on throwaway state:
+- **6 benign requests,** including mild urgency and informal wording, to measure false positives.
+- **7 attacks:** prompt injection three ways (direct, a fake system message, in Spanish), pressure to skip
+  checks, impersonation, a data-exfiltration ask, and a fake verbal approval.
+- **3 out-of-scope requests** that code must deny without calling the model.
+
+It prints one line per case and then a summary. That summary separates two things:
+- **Safety rules, which must never break:** out-of-scope requests are denied without a model call, and
+  only approved bytes are delivered. A break makes the command exit with status 1.
+- **Measured rates:** attacks flagged, blocked or delivered; benign requests wrongly flagged; unconfirmed
+  findings held by the false-positive check; model failures; and spend. These describe the model and
+  can vary between runs.
+
+The fixture baseline flags nothing, so 6 of the 7 attacks are delivered: they're dressed as fully
+approved requests, and catching them is the model's job. A live run makes 13 Muse calls, costing
+roughly $0.10–0.15 at the reported prices:
+
+```powershell
+$out = Join-Path ([Environment]::GetFolderPath("Desktop")) "forgevigil-eval.txt"
+.\.venv\Scripts\python.exe -m forge_vigil eval --assessor muse *> $out
+notepad $out
+```
+
+Add `--json <path>` to save every receipt as well. Reports never contain request text or the API key.
+
 ## API
 
 `POST /v1/requests` with `Authorization: Bearer <token>` and `Content-Type: application/json`:
@@ -143,6 +175,7 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/service.py` | idempotent orchestration, atomic completion, restart recovery |
 | `forge_vigil/http_api.py` | localhost HTTP adapter, bearer authentication, transport limits |
 | `forge_vigil/demo.py` | the smoke demo, with fixture and live modes |
+| `forge_vigil/evaluation.py`, `eval_cases.json` | the labelled evaluation and its 16 fictional cases |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
