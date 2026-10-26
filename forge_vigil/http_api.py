@@ -17,6 +17,7 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 
+from .errors import ConfigError
 from .schema import ID_PATTERN, MAX_BODY_BYTES, RequestValidationError, parse_request
 from .service import CONFLICT, DECIDED, IN_PROGRESS, REPLAYED, ForgeVigilService, Outcome
 
@@ -26,10 +27,6 @@ MIN_TOKEN_LENGTH = 32
 _TOKEN_SYNTAX = re.compile(r"[A-Za-z0-9._~+/-]+=*")  # RFC 6750 b64token
 _CONTENT_LENGTH = re.compile(r"[0-9]{1,12}")
 DISPOSITION_STATUS = {"ALLOW": 200, "BLOCK": 403, "DENY": 403, "REVIEW": 202}
-
-
-class ConfigError(Exception):
-    """Startup configuration is unsafe; the server must not start."""
 
 
 def validate_token(token: str | None) -> str:
@@ -117,8 +114,9 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path != "/health":
             self._reply(404, {"error": "not_found"})
             return
-        healthy = self.server.service.healthy()
-        self._reply(200 if healthy else 503, {"status": "ok" if healthy else "unavailable", "mode": "fixture"})
+        service = self.server.service
+        healthy = service.healthy()
+        self._reply(200 if healthy else 503, {"status": "ok" if healthy else "unavailable", "mode": service.assessor_mode})
 
     def do_POST(self) -> None:
         if self.path != "/v1/requests":

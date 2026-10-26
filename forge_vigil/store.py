@@ -6,7 +6,9 @@ Invariants, enforced here and by schema constraints and triggers:
 * request completion, outbox insertion and receipt insertion happen in ONE
   transaction, guarded by the attempt that claimed the request;
 * at most one receipt and one outbox item exist per (actor_id, request_id);
-* receipts and outbox items are append-only; completed requests are final.
+* receipts and outbox items are append-only; completed requests are final;
+* every live model call is reserved against the spend cap before it is made,
+  and resolved spend entries are final.
 
 One active service instance per database file is assumed.
 """
@@ -78,7 +80,29 @@ _SCHEMA = (
        BEGIN SELECT RAISE(ABORT, 'completed requests are final'); END""",
     """CREATE TRIGGER IF NOT EXISTS requests_no_delete BEFORE DELETE ON requests
        BEGIN SELECT RAISE(ABORT, 'requests are retained'); END""",
+    # Store schema 2: spend ledger for live model calls (amounts in nano-USD).
+    """CREATE TABLE IF NOT EXISTS spend_ledger (
+        reservation_id TEXT PRIMARY KEY,
+        actor_id TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        attempt_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        reserved_nanousd INTEGER NOT NULL CHECK (reserved_nanousd >= 0),
+        actual_nanousd INTEGER CHECK (actual_nanousd >= 0),
+        input_tokens INTEGER CHECK (input_tokens >= 0),
+        output_tokens INTEGER CHECK (output_tokens >= 0),
+        state TEXT NOT NULL CHECK (state IN ('reserved', 'settled', 'unknown')),
+        created_at TEXT NOT NULL,
+        resolved_at TEXT,
+        FOREIGN KEY (actor_id, request_id) REFERENCES requests (actor_id, request_id)
+    )""",
+    """CREATE TRIGGER IF NOT EXISTS spend_ledger_resolved_final BEFORE UPDATE ON spend_ledger
+       WHEN OLD.state != 'reserved'
+       BEGIN SELECT RAISE(ABORT, 'resolved spend entries are final'); END""",
+    """CREATE TRIGGER IF NOT EXISTS spend_ledger_no_delete BEFORE DELETE ON spend_ledger
+       BEGIN SELECT RAISE(ABORT, 'spend entries are retained'); END""",
 )
+_MIGRATABLE_VERSIONS = (None, "1", STORE_SCHEMA_VERSION)  # 1 -> 2 only adds the spend ledger
 
 
 class AttemptNotCurrent(Exception):
@@ -178,14 +202,17 @@ class Store:
         with self._reader() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
         with self._transaction() as conn:
-            for statement in _SCHEMA:
+            conn.execute(_SCHEMA[0])
+            row = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
+            version = row[0] if row else None
+            if version not in _MIGRATABLE_VERSIONS:
+                # Raised inside the transaction, so nothing is written to an unknown store.
+                raise RuntimeError(f"unsupported store schema {version!r}; refusing to migrate implicitly")
+            for statement in _SCHEMA[1:]:
                 conn.execute(statement)
             conn.execute(
-                "INSERT OR IGNORE INTO meta (key, value) VALUES ('store_schema', ?)", (STORE_SCHEMA_VERSION,)
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('store_schema', ?)", (STORE_SCHEMA_VERSION,)
             )
-            (version,) = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
-        if version != STORE_SCHEMA_VERSION:
-            raise RuntimeError(f"unsupported store schema {version!r}; refusing to migrate implicitly")
 
     def claim(
         self,
@@ -319,3 +346,69 @@ class Store:
         except sqlite3.Error:
             return False
         return True
+
+    def reserve_spend(
+        self,
+        *,
+        actor_id: str,
+        request_id: str,
+        attempt_id: str,
+        model: str,
+        amount_nanousd: int,
+        cap_nanousd: int,
+        created_at: str,
+    ) -> str | None:
+        """Atomically reserve a call's worst-case cost, or return None if it would exceed the cap."""
+        with self._transaction() as conn:
+            if _committed_spend(conn) + amount_nanousd > cap_nanousd:
+                return None
+            reservation_id = "sp_" + uuid.uuid4().hex
+            conn.execute(
+                "INSERT INTO spend_ledger (reservation_id, actor_id, request_id, attempt_id, model, "
+                "reserved_nanousd, state, created_at) VALUES (?, ?, ?, ?, ?, ?, 'reserved', ?)",
+                (reservation_id, actor_id, request_id, attempt_id, model, amount_nanousd, created_at),
+            )
+        return reservation_id
+
+    def settle_spend(
+        self, reservation_id: str, *, actual_nanousd: int, input_tokens: int, output_tokens: int, resolved_at: str
+    ) -> None:
+        with self._transaction() as conn:
+            conn.execute(
+                "UPDATE spend_ledger SET state = 'settled', actual_nanousd = ?, input_tokens = ?, output_tokens = ?, "
+                "resolved_at = ? WHERE reservation_id = ? AND state = 'reserved'",
+                (actual_nanousd, input_tokens, output_tokens, resolved_at, reservation_id),
+            )
+
+    def mark_spend_unknown(self, reservation_id: str, *, resolved_at: str) -> None:
+        """Usage could not be confirmed: the full reservation stays counted against the cap."""
+        with self._transaction() as conn:
+            conn.execute(
+                "UPDATE spend_ledger SET state = 'unknown', resolved_at = ? WHERE reservation_id = ? AND state = 'reserved'",
+                (resolved_at, reservation_id),
+            )
+
+    def recover_spend(self, resolved_at: str) -> int:
+        """Reservations left in flight by a previous process become 'unknown' (still counted)."""
+        with self._transaction() as conn:
+            return conn.execute(
+                "UPDATE spend_ledger SET state = 'unknown', resolved_at = ? WHERE state = 'reserved'", (resolved_at,)
+            ).rowcount
+
+    def committed_spend_nanousd(self) -> int:
+        with self._reader() as conn:
+            return _committed_spend(conn)
+
+    def spend_entries(self) -> list[dict]:
+        with self._reader() as conn:
+            conn.row_factory = sqlite3.Row
+            return [dict(row) for row in conn.execute("SELECT * FROM spend_ledger ORDER BY created_at, reservation_id")]
+
+
+def _committed_spend(conn: sqlite3.Connection) -> int:
+    # Settled calls count what they cost; in-flight and unknown calls count their full reservation.
+    (total,) = conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_nanousd ELSE reserved_nanousd END), 0) "
+        "FROM spend_ledger"
+    ).fetchone()
+    return int(total)

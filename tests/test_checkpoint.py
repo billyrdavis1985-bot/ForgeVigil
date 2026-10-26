@@ -235,6 +235,11 @@ class DecisionTests(_TempStateTest):
                 "threat_finding": "none",
                 "reason_code": "FIXTURE_FIXED_CLEAN",
                 "evidence_refs": ["fixture:fixed-clean-v1"],
+                "evidence_check": {
+                    "threat_support": "not_applicable",
+                    "refs": [{"ref": "fixture:fixed-clean-v1", "result": "verified"}],
+                    "quotes": [],
+                },
                 "validation_error": None,
             },
         )

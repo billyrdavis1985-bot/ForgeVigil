@@ -3,8 +3,8 @@
 An assessor ADVISES. Its output is validated before use and can only hold
 (REVIEW) or block (BLOCK) a request; it can never grant a capability.
 
-Checkpoint 01 ships only fixed fixture assessors. They return a pre-written
-output and do NOT analyze request content or malicious intent.
+Fixture assessors return a pre-written output and do NOT analyze request
+content or intent. The live Muse assessor is in `muse.py`.
 """
 
 from __future__ import annotations
@@ -19,10 +19,14 @@ from .versions import ASSESSMENT_SCHEMA_VERSION
 
 THREAT_FINDINGS = frozenset({"none", "threat"})
 MAX_EVIDENCE_REFS = 16
+MAX_QUOTES = 5
+MAX_QUOTE_CHARS = 200
+NANOUSD_PER_USD = 1_000_000_000
 _REQUIRED_FIELDS = frozenset({"schema", "status", "threat_finding", "reason_code", "evidence_refs"})
-_OPTIONAL_FIELDS = frozenset({"label"})
+_OPTIONAL_FIELDS = frozenset({"label", "quotes"})
 _REASON_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,63}")
-_EVIDENCE_REF = re.compile(r"(?:request|registry|document|recipient|fixture):[A-Za-z0-9._-]{1,64}")
+# kind:target with an optional :claim, for example registry:HR-2026-999:not_found.
+_EVIDENCE_REF = re.compile(r"(?:request|registry|document|recipient|fixture):[A-Za-z0-9._-]{1,64}(?::[a-z_]{1,32})?")
 
 FIXTURE_CLEAN_OUTPUT = {
     "schema": ASSESSMENT_SCHEMA_VERSION,
@@ -34,9 +38,14 @@ FIXTURE_CLEAN_OUTPUT = {
 }
 
 
+def format_usd(nanousd: int) -> str:
+    whole, fraction = divmod(nanousd, NANOUSD_PER_USD)
+    return f"{whole}.{f'{fraction:09d}'.rstrip('0').ljust(2, '0')}"
+
+
 @dataclass(frozen=True)
 class Usage:
-    status: str  # "zero" or "unknown"
+    status: str  # "zero", "metered" or "unknown"
     reason: str
     input_tokens: int | None = None
     output_tokens: int | None = None
@@ -51,6 +60,14 @@ class Usage:
         return cls("zero", "assessment_not_run_no_inference_call", 0, 0, "0.00")
 
     @classmethod
+    def no_call(cls, reason: str) -> "Usage":
+        return cls("zero", reason, 0, 0, "0.00")
+
+    @classmethod
+    def metered(cls, input_tokens: int, output_tokens: int, cost_nanousd: int) -> "Usage":
+        return cls("metered", "provider_reported_usage", input_tokens, output_tokens, format_usd(cost_nanousd))
+
+    @classmethod
     def unknown(cls, reason: str) -> "Usage":
         return cls("unknown", reason)
 
@@ -60,6 +77,8 @@ class Usage:
 
 @dataclass(frozen=True)
 class AssessmentInput:
+    actor_id: str
+    attempt_id: str
     request_id: str
     document_id: str
     recipient_id: str
@@ -71,6 +90,9 @@ class AssessmentInput:
 class AssessorReply:
     output: object
     usage: Usage
+    # Set when the assessor could not assess for an expected reason (budget,
+    # model unavailable, tool limit). Usage still reports what was spent.
+    failure: str | None = None
 
 
 class Assessor(Protocol):
@@ -103,6 +125,7 @@ class Assessment:
     threat_finding: str
     reason_code: str
     evidence_refs: tuple[str, ...]
+    quotes: tuple[str, ...] = ()
 
 
 class InvalidAssessment(ValueError):
@@ -135,7 +158,14 @@ def validate_assessment(output: object) -> Assessment:
         raise InvalidAssessment("INVALID_EVIDENCE_REFS")
     if any(not isinstance(ref, str) or not _EVIDENCE_REF.fullmatch(ref) for ref in refs) or len(set(refs)) != len(refs):
         raise InvalidAssessment("INVALID_EVIDENCE_REFS")
+    quotes = output.get("quotes", [])
+    if not isinstance(quotes, list) or len(quotes) > MAX_QUOTES:
+        raise InvalidAssessment("INVALID_QUOTES")
+    if any(not isinstance(quote, str) or not 1 <= len(quote) <= MAX_QUOTE_CHARS for quote in quotes):
+        raise InvalidAssessment("INVALID_QUOTES")
     label = output.get("label")
     if label is not None and (not isinstance(label, str) or len(label) > 200):
         raise InvalidAssessment("INVALID_LABEL")
-    return Assessment(threat_finding=finding, reason_code=reason_code, evidence_refs=tuple(refs))
+    return Assessment(
+        threat_finding=finding, reason_code=reason_code, evidence_refs=tuple(refs), quotes=tuple(quotes)
+    )

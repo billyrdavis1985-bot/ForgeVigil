@@ -17,7 +17,7 @@ from .fixtures import FixtureSet
 from .versions import POLICY_VERSION
 
 ALLOW = "ALLOW"    # every permission check passed; exactly one outbox item
-BLOCK = "BLOCK"    # supported threat finding from the assessment; no delivery
+BLOCK = "BLOCK"    # threat finding whose evidence code verified; no delivery
 DENY = "DENY"      # actor/document/recipient out of scope; no intent is inferred
 REVIEW = "REVIEW"  # uncertainty or failure; no delivery, held for a human
 
@@ -71,7 +71,11 @@ def decide(
     approval_ref: str | None,
     assessment: Assessment | None,
     assessment_problem: str | None = None,
+    *,
+    threat_support: str = "not_applicable",
 ) -> Decision:
+    """`threat_support` comes from `evidence.check_evidence`. Anything but
+    "verified" turns a threat finding into REVIEW, never into ALLOW."""
     denial = scope_denial(fixtures, actor_id, document_id, recipient_id)
     if denial is not None:
         return denial
@@ -79,6 +83,12 @@ def decide(
     if assessment is None:
         return Decision(REVIEW, assessment_problem or "ASSESSMENT_UNAVAILABLE", approval)
     if assessment.threat_finding == "threat":
+        if threat_support != "verified":
+            # Evidence code could not confirm: a possible false positive, held for a human.
+            return Decision(REVIEW, "THREAT_EVIDENCE_UNVERIFIED", approval)
+        if approval == "unverified" and assessment.reason_code == "APPROVAL_MANIPULATION":
+            # An unknown reference is uncertainty, not proof of manipulation.
+            return Decision(REVIEW, "APPROVAL_UNVERIFIED", approval)
         return Decision(BLOCK, "THREAT_FINDING_SUPPORTED", approval)
     if approval == "missing":
         return Decision(REVIEW, "APPROVAL_MISSING", approval)

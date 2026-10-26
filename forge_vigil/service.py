@@ -10,6 +10,7 @@ ALLOW decision is paired with an outbox item built from server-owned bytes.
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ from .assessment import (
     Usage,
     validate_assessment,
 )
+from .evidence import check_evidence
 from .fixtures import FixtureSet, default_fixtures
 from .schema import SubmittedRequest, input_digest
 from .store import AttemptNotCurrent, Claim, ExistingRequest, OutboxItem, Store
@@ -43,6 +45,8 @@ CONFLICT = "conflict"        # same request_id, different payload; no new work
 IN_PROGRESS = "in_progress"  # an earlier attempt has not completed; no result yet
 UNAVAILABLE = "unavailable"  # state could not be recorded; nothing was delivered
 
+_FAILURE_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,47}")
+
 
 @dataclass(frozen=True)
 class Outcome:
@@ -57,6 +61,7 @@ class _AssessmentRun:
     record: dict
     usage: Usage
     fallback_state: str
+    threat_support: str = "not_applicable"
 
 
 def utc_now() -> str:
@@ -69,13 +74,24 @@ class ForgeVigilService:
         self.assessor = assessor
         self.fixtures = fixtures if fixtures is not None else default_fixtures()
         self.policy_digest = policy.policy_digest(self.fixtures)
-        # Starting an instance holds anything a previous process left
-        # incomplete for REVIEW. Nothing is re-assessed or re-delivered.
+        # Starting an instance resolves what a previous process left unfinished:
+        # in-flight spend reservations become "unknown" (still counted against
+        # the cap) and incomplete requests are held for REVIEW. Nothing is
+        # re-assessed or re-delivered.
+        self.recovered_spend = self.store.recover_spend(utc_now())
         self.recovered = self._recover_incomplete()
 
     @property
     def adapter_id(self) -> str:
         return str(getattr(self.assessor, "adapter_id", "unknown"))
+
+    @property
+    def prompt_version(self) -> str:
+        return str(getattr(self.assessor, "prompt_version", PROMPT_VERSION))
+
+    @property
+    def assessor_mode(self) -> str:
+        return "fixture" if self.adapter_id.startswith("fixture.") else "live"
 
     def healthy(self) -> bool:
         return self.store.healthy()
@@ -129,7 +145,7 @@ class ForgeVigilService:
             decision = denial
             run = _AssessmentRun(None, None, self._assessment_record("not_run", "not_assessed"), Usage.not_run(), "none")
         else:
-            run = self._assess(request)
+            run = self._assess(claim, request)
             decision = policy.decide(
                 self.fixtures,
                 claim.actor_id,
@@ -138,6 +154,7 @@ class ForgeVigilService:
                 claim.approval_ref,
                 run.assessment,
                 run.problem,
+                threat_support=run.threat_support,
             )
         outbox = self._outbox_item(claim) if decision.disposition == policy.ALLOW else None
         receipt = self._receipt(
@@ -145,8 +162,10 @@ class ForgeVigilService:
         )
         return receipt, outbox
 
-    def _assess(self, request: SubmittedRequest) -> _AssessmentRun:
+    def _assess(self, claim: Claim, request: SubmittedRequest) -> _AssessmentRun:
         item = AssessmentInput(
+            actor_id=claim.actor_id,
+            attempt_id=claim.attempt_id,
             request_id=request.request_id,
             document_id=request.document_id,
             recipient_id=request.recipient_id,
@@ -179,6 +198,15 @@ class ForgeVigilService:
                 Usage.unknown("assessor_reply_malformed_usage_unknown"),
                 "assessment_invalid",
             )
+        if reply.failure is not None:
+            code = reply.failure if isinstance(reply.failure, str) and _FAILURE_CODE.fullmatch(reply.failure) else "FAILED"
+            return _AssessmentRun(
+                None,
+                f"ASSESSMENT_{code}",
+                self._assessment_record("failed", "unknown"),
+                reply.usage,
+                f"assessor_failure:{code.lower()}",
+            )
         try:
             assessment = validate_assessment(reply.output)
         except InvalidAssessment as exc:
@@ -189,6 +217,15 @@ class ForgeVigilService:
                 reply.usage,
                 "assessment_invalid",
             )
+        check = check_evidence(
+            assessment,
+            message=request.message,
+            fixtures=self.fixtures,
+            actor_id=claim.actor_id,
+            document_id=claim.document_id,
+            recipient_id=claim.recipient_id,
+            adapter_id=self.adapter_id,
+        )
         return _AssessmentRun(
             assessment,
             None,
@@ -197,9 +234,11 @@ class ForgeVigilService:
                 assessment.threat_finding,
                 reason_code=assessment.reason_code,
                 evidence_refs=assessment.evidence_refs,
+                evidence_check=check.to_record(),
             ),
             reply.usage,
             "none",
+            check.threat_support,
         )
 
     def _assessment_record(
@@ -209,6 +248,7 @@ class ForgeVigilService:
         *,
         reason_code: str | None = None,
         evidence_refs: tuple[str, ...] = (),
+        evidence_check: dict | None = None,
         validation_error: str | None = None,
         adapter_id: str | None = None,
     ) -> dict:
@@ -218,6 +258,7 @@ class ForgeVigilService:
             "threat_finding": threat_finding,
             "reason_code": reason_code,
             "evidence_refs": list(evidence_refs),
+            "evidence_check": evidence_check,
             "validation_error": validation_error,
         }
 
@@ -245,6 +286,7 @@ class ForgeVigilService:
         usage: Usage,
         fallback_state: str,
         effect_id: str | None,
+        prompt_version: str | None = None,
     ) -> dict:
         return {
             "receipt_schema": RECEIPT_SCHEMA_VERSION,
@@ -265,7 +307,7 @@ class ForgeVigilService:
             "usage": usage.to_dict(),
             "versions": {
                 "code": CODE_VERSION,
-                "prompt": PROMPT_VERSION,
+                "prompt": prompt_version or self.prompt_version,
                 "policy": POLICY_VERSION,
                 "request_schema": REQUEST_SCHEMA_VERSION,
                 "assessment_schema": ASSESSMENT_SCHEMA_VERSION,
@@ -320,6 +362,7 @@ class ForgeVigilService:
                 Usage.unknown("interrupted_before_completion_usage_unknown"),
                 "recovered_after_restart",
                 None,
+                prompt_version="unknown:interrupted_attempt",
             )
             try:
                 self.store.complete(claim, receipt, None)

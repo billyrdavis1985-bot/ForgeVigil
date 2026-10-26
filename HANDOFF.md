@@ -1,78 +1,56 @@
 # HANDOFF: ForgeVigil
 
 ## Session
-- **Checkpoint 01, first build session.**
-- **Date:** 2026-10-26, America/New_York. Work started about 13:56 EDT; this handoff was last updated about 14:25 EDT. That is roughly 30 minutes of the 2-hour allowance, which was not exceeded. Times come from the system clock and are approximate.
-- **Branch / HEAD:** `main`. This file is part of the initial commit; its SHA is in `git log`, because a commit cannot record its own SHA.
-- **Commit/push approval:** received from the operator on 2026-10-26. The commit is authored under the operator's GitHub noreply identity and carries no AI attribution trailers. When the commit was made, this session's GitHub write-access check had been refused, so the operator may push it separately from a git bundle. The remote shows whether it has been pushed.
+- **Checkpoint 02: live Muse assessor.** The operator assigned it in the same session that built Checkpoint 01.
+- **Date:** 2026-10-26, America/New_York. Checkpoint 02 work ran from about 15:56 to 16:10 EDT, by the system clock.
+- **Base:** `main` at `bb4b85a` (Checkpoint 01, on GitHub). Checkpoint 02 is built on top of it.
+- **Commit status:** commit and push approval was requested at the end of the session. If you are reading this in a commit, approval was given. Every commit is authored as the operator with no attribution trailers (see AGENTS.md).
 
-## Starting state
-- `github.com/billyrdavis1985-bot/ForgeVigil` was public and empty: no remote refs, no AGENTS.md, no prior source.
-- A separate workspace reportedly holds an earlier uncommitted implementation, transferred as `ForgeVigil_Checkpoint_01_Uncommitted.patch`. That patch was **not provided**, so it was not applied or compared. This implementation was written fresh from the CP01 spec and is the only one here. If that patch shows up later, compare it against this code. Do not merge both.
-
-## Files in the initial commit
-`.gitignore`, `README.md`, `AGENTS.md`, `HANDOFF.md`,
-`forge_vigil/{__init__,__main__,versions,schema,fixtures,assessment,policy,store,service,http_api,demo}.py`,
-`tests/{__init__,support,test_checkpoint}.py`. `__pycache__/` and runtime databases are git-ignored.
-
-## Implemented
-- **HTTP adapter:** `POST /v1/requests` and `GET /health` on 127.0.0.1 only (a development server, not a deployment server). Bearer-token auth is checked first, before anything is read or parsed. Startup is refused without a token of at least 32 characters, and there is no default. The actor comes from the server's token map.
-- **Strict schema:** exactly five fields. Unknown fields, duplicate keys, wrong types, NaN, invalid UTF-8, lone surrogates, path- or URL-shaped IDs and bad message lengths are all rejected. Transport limits come before the body is read: 411 / 413 (16 KiB) / 415, and chunked encoding is refused.
-- **Fixtures:** server-owned and frozen. `operator`; `public-spec` / `restricted-cost-sheet`; `supplier` / `unvetted-vendor`; approval `HR-2026-118`.
-- **Assessor:** a replaceable interface. The default `fixture.fixed-clean.v1` is labelled as not analyzing content. Output is schema-validated, and invalid, failed or unavailable output produces REVIEW.
-- **Policy:** in `policy.py`, the only code that can produce ALLOW.
-  - DENY covers out-of-scope actor, document or recipient. The assessment does not run.
-  - BLOCK covers a supported threat finding.
-  - REVIEW covers a missing approval, an unverified one (never called forged), or one that is revoked or bound to something else.
-  - ALLOW requires every check to pass explicitly.
-- **SQLite persistence:**
-  - The intent is committed (synchronous=FULL) before any assessment.
-  - The state update, outbox row and receipt are written in one transaction, guarded by the claiming attempt's ID.
-  - UNIQUE constraints on (actor, request_id) allow at most one outbox row and one receipt per request.
-  - Triggers make receipts and outbox rows append-only and completed requests final.
-- **Idempotency:** scoped by (actor, request_id) and an input digest; the raw message is never stored.
-  - Same payload: the recorded receipt is replayed.
-  - Different payload: 409 conflict.
-  - Earlier attempt still running: 409 pending.
-- **Restart:** completed results are kept. A request left in progress is recorded as REVIEW `INCOMPLETE_AT_RESTART` with usage `unknown`, and nothing is re-assessed or re-delivered.
-- **Receipts** contain:
-  - request and actor IDs, timestamps, adapter ID
-  - code, prompt, policy, schema and fixture versions, plus the policy digest
-  - evidence refs, threat finding, disposition and reason, fallback state
-  - usage: zero in fixture mode with the reason `fixture_mode_no_paid_inference`; unknown when the assessment failed or was interrupted
-  - effect ID
-
-## Not attempted (out of scope)
-Live model or provider calls, SDKs, a registry-investigation contract, budgets or spending controls, hosting, a general policy engine, an operator review/resolve workflow, and model evaluation.
+## What Checkpoint 02 adds
+- **`muse.py`, the live Muse assessor.** It talks to the OpenAI-compatible Chat Completions API (default `https://api.meta.ai/v1`, model `muse-spark-1.1`) using the standard library only.
+  - The request goes to Muse as JSON-encoded, untrusted data.
+  - The answer must match a strict JSON schema. Code sets the schema and status fields.
+  - HTTPS only; redirects refused; response size capped; per-socket timeout.
+  - Off by default. It needs `MODEL_API_KEY` and `FORGEVIGIL_SPEND_CAP_USD`.
+- **`investigation.py`, three read-only tools:** `lookup_approval`, `get_document_facts`, `get_recipient_facts`.
+  - Results carry the exact evidence reference to cite.
+  - The model gets at most 4 tool calls and 4 model calls; after that, `tool_choice` is `none` and it must answer.
+  - Unknown tools and malformed arguments get error results instead of crashing anything.
+- **`evidence.py`, the false-positive check.** A threat finding becomes BLOCK only if every cited ref and quote is confirmed against the request text and server-owned facts, and the finding cites the requester's own words. Otherwise it goes to REVIEW (`THREAT_EVIDENCE_UNVERIFIED`). Fixture evidence is accepted only from fixture adapters. Quotes are stored only as SHA-256 hashes.
+- **Policy change.** A verified threat whose reason is `APPROVAL_MANIPULATION` on an approval that is merely unverified stays REVIEW (`APPROVAL_UNVERIFIED`), because an unknown reference is not proof of manipulation.
+- **Spend control (`budget.py`, plus the spend ledger in `store.py`).** Store schema is now 2, and schema-1 databases upgrade in place; unknown versions are refused before anything is written.
+  - Before each call, the worst-case cost (request bytes + 512 headroom tokens, plus max output tokens) is reserved against the cap. A call that doesn't fit is never made.
+  - Settled entries count their actual cost. In-flight and unknown entries count their full reservation.
+  - Ledger entries are append-only and final once resolved. A restart marks in-flight reservations as unknown.
+  - Money is integer nano-USD.
+- **Assessor interface.** `AssessorReply.failure` reports expected failures (budget, timeout, auth, rejected request, tool limit, malformed or invalid output) together with the usage actually measured. Each maps to `REVIEW ASSESSMENT_<CODE>`. `Usage` gains a `metered` status.
+- **CLI.** `serve` and `demo` take `--assessor muse`. The live demo checks safety invariants only and reports recorded spend.
+- **Version bumps:** code 0.2.0, assessment schema v2 (optional `quotes`, refs may carry `:claim`), receipt schema v2 (`assessment.evidence_check`), policy `cp02.policy.v1`, store schema 2.
+- **Fix:** `GET /health` now reports `mode: live` when the Muse assessor is in use. It previously always said `fixture`.
 
 ## Verification (observed)
-| Command | Result |
+| Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tests -t . -v` | **First run: 20 tests, 3 subtest failures** in one test. Cause: the "never called forged" assertion looked for the substring `forg`, which matched the product's own schema IDs (`forgevigil.receipt.v1`). The behaviour was correct; the assertion now matches the words `forged`, `forgery` and `fabricat…`. **Run after the fix: `Ran 20 tests in 1.478s, OK`.** |
-| `python3 -m forge_vigil demo` | ALLOW 200 / DENY 403 `DOCUMENT_RESTRICTED` / REVIEW 202 `APPROVAL_UNVERIFIED`; the replay returned the recorded receipt; outbox total 1 with exact `public-spec` bytes; `RESULT: PASS`. |
-| Deliberate-defect check (throwaway script, scratch copy, not in the repo) | 5 of 5 defects caught: outbox committed separately from its receipt; approval binding ignored; body read before auth; altered payload replayed instead of conflicting; unknown fields ignored. |
-| Suite and demo re-run on the exact committed tree, after the docs-only removal of model names | `Ran 20 tests in 1.673s, OK`; demo `RESULT: PASS`. |
+| `python3 -m unittest discover -s tests -t . -v` | `Ran 35 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17: 20 from Checkpoint 01 (one expectation gained the new `evidence_check` field) and 15 new. |
+| `python3 -m forge_vigil demo` | Fixture mode: ALLOW / DENY / REVIEW, replay, 1 outbox item; `RESULT: PASS`. |
+| Live-demo code path against the fake API (test) | `RESULT: PASS`; recorded spend `0.00335` USD of fake usage; 2 API calls (the DENY case and the replay made none). |
+| Deliberate-defect check (scratch copy, not in repo) | **First run: 10 of 11 caught.** "Fixture evidence accepted from a live model" was missed: the code was right, but the test case was also rejected by the separate "must cite the requester's words" rule. The test case now includes a genuine quote. **Re-run: 11 of 11 caught.** |
+| Operator, Checkpoint 01 on Windows with Python 3.11 | The operator reported that all tests and the demo pass. |
 
-The 20 tests cover all 14 minimum checks in the brief (tagged `[check N]` in `tests/test_checkpoint.py`). The test count is **not** a model-accuracy metric. The tests use fixed fixtures, and no inference happened.
-
-Application API calls: **none**. Cost: **$0**. Verified on Python 3.13 only.
+All of these tests use the local fake API. Application API calls: **none**. Real spend: **$0**.
 
 ## Known risks and open decisions
-1. **REVIEW cannot be resolved yet.** There is no workflow for releasing or rejecting a held request. A held `request_id` is final, so the client has to resubmit with a new ID.
-2. **Single-instance use is assumed but not enforced.** There is no lock file. A second instance on the same database would mark the first instance's in-flight requests as REVIEW. The guarded completion still prevents a second effect.
-3. **If both the completion and its REVIEW fallback fail,** the request stays in progress and returns 409 pending until a restart records it as REVIEW. If recovery cannot write, the service refuses to start.
-4. **The input digest is an unkeyed SHA-256,** so short messages can be guessed from it. Use a keyed HMAC before handling real data.
-5. **Database file permissions follow the process umask.** The outbox holds document bytes.
-6. **The development server is `http.server`:** no TLS, no rate limiting, one thread per connection, 10 s socket timeout.
-7. **Design choices for operator confirmation:** a scope DENY skips the assessment; BLOCK takes precedence over an approval REVIEW; HTTP mapping is REVIEW → 202, DENY/BLOCK → 403; message control characters other than `\t\n\r` are rejected.
+1. **Never run against the real Meta API.** The base URL, model ID, request shape (`response_format` json_schema together with `tools`, plus `tool_choice` and `max_tokens`), usage field names (`prompt_tokens`, `completion_tokens`) and prices all come from public reports. The first live run must confirm them. If Meta rejects `response_format` combined with tools, switch the final answer to a submit tool.
+2. **Detection quality is unmeasured.** It needs the labelled evaluation set (the planned 16 cases) run live.
+3. **The evidence check confirms existence, not meaning.** A real quote can still be misjudged, so a BLOCK can be a false positive built on real text. BLOCK receipts should be reviewable.
+4. **The token bound assumes at most one token per byte.** Hidden reasoning tokens could push a call past `max_tokens`. That overrun is recorded but can overshoot the cap by one call.
+5. **The spend cap is a lifetime total per database**, not a daily limit, and there is no reset command (the ledger is append-only by design).
+6. **Timeouts are per socket operation**, not total wall time.
+7. **This cloud workspace blocks `api.meta.ai`.** Live runs happen on the operator's PC, or after allowing the domain in the environment's network settings.
+8. **Still open from Checkpoint 01:** no review/resolve workflow; single instance per database is assumed but not enforced; the input digest is an unkeyed SHA-256; database file permissions follow the umask; the development server is `http.server`.
 
-## Next task: adversarial review session
-Review the actual diff and tests adversarially. Fix only checkpoint defects that are agreed with the operator, and record each finding with evidence. Focus on:
-- the transaction and recovery paths in `store.py` and `service.py`, including ambiguous commit failures;
-- HTTP parsing edge cases in `http_api.py`;
-- whether any input or assessor output can reach ALLOW, or the outbox body, without passing every check in `policy.decide`.
-
-Do not add features.
-
-## Follow-on recommendation: next implementation session (a recommendation, not a delegation)
-After the review lands, take the next checkpoint the operator assigns: a live model adapter behind the existing `Assessor` interface, a bounded registry-investigation contract, and spending controls. Usage must report `unknown` until it is metered, and keep the fixture assessor as the default for tests.
+## Next steps
+1. **Operator:** first live run on your PC with `FORGEVIGIL_SPEND_CAP_USD=2.00`, using `demo --assessor muse` (see README). Share the output; it never contains the key.
+2. **Fix whatever that run shows** about the real API shape.
+3. **Labelled evaluation set:** benign requests, social engineering, prompt injection and approval-reference cases, run live to measure detection and false-positive rates with recorded spend.
+4. **Operator review command:** a way to resolve REVIEW and BLOCK receipts, which is the human side of false-positive handling.

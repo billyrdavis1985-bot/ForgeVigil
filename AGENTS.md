@@ -7,8 +7,12 @@ Operator instructions take precedence over this file.
 - Billy Davis (operator) assigns checkpoints. Routine implementation, debugging and local testing
   within the assigned checkpoint need no further permission.
 - **No commits, pushes, merges, tags or releases** without explicit operator approval of that specific change.
+- **Billy Davis is the only contributor.** Author every commit as
+  `Billy Davis <245758823+billyrdavis1985-bot@users.noreply.github.com>`, with no `Co-Authored-By`
+  or other attribution trailers.
 - **No paid inference, provider API calls, deployment, hosting or other spending** from application
-  code unless the operator has explicitly authorized it for the current checkpoint.
+  code unless the operator has explicitly authorized it for the current checkpoint. Live Muse calls
+  (`--assessor muse`) run only with an operator-set `FORGEVIGIL_SPEND_CAP_USD`. Tests use the local fake API.
 - Do not launch or contact other agents or models, and do not claim their reviews happened. The operator rotates work.
 
 ## Safety

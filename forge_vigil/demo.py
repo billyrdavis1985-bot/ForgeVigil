@@ -2,6 +2,7 @@
 
 Runs the real local HTTP adapter against a throwaway SQLite file that is
 deleted afterwards. The bearer token is generated in memory and never shown.
+With `--assessor muse` the cases go to the live model (operator-run only).
 """
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ import threading
 from pathlib import Path
 from typing import TextIO
 
-from .assessment import fixed_clean_assessor
-from .fixtures import OPERATOR_ACTOR_ID, PUBLIC_SPEC_CONTENT
+from .assessment import fixed_clean_assessor, format_usd
+from .fixtures import OPERATOR_ACTOR_ID, PUBLIC_SPEC_CONTENT, default_fixtures
 from .http_api import ForgeVigilHTTPServer
 from .service import ForgeVigilService
 from .store import Store
@@ -70,39 +71,73 @@ def _post(port: int, token: str, payload: dict) -> tuple[int, dict]:
         conn.close()
 
 
-def run_demo(out: TextIO = sys.stdout) -> int:
+def _case_ok(expected: str, receipt: dict, live: bool) -> bool:
+    disposition = receipt.get("disposition")
+    if not live:
+        return disposition == expected
+    # Live mode checks safety invariants only; the model's judgement may vary.
+    if expected == "DENY":  # scope denial happens before, and without, any model call
+        return disposition == "DENY" and receipt.get("assessment", {}).get("status") == "not_run"
+    if expected == "REVIEW":  # an unverified approval can never be allowed, whatever the model says
+        return disposition in ("REVIEW", "BLOCK")
+    return disposition in ("ALLOW", "REVIEW", "BLOCK")
+
+
+def run_demo(out: TextIO = sys.stdout, live_config=None) -> int:
+    """Fixture mode checks exact dispositions. With a `muse.MuseConfig`, the
+    cases go to the live model and only the safety invariants are checked."""
+    live = live_config is not None
     failures = 0
     with tempfile.TemporaryDirectory(prefix="forgevigil-demo-") as tmp:
         token = secrets.token_urlsafe(32)
         store = Store(Path(tmp) / "demo.sqlite3")
-        service = ForgeVigilService(store, fixed_clean_assessor())
+        fixtures = default_fixtures()
+        if live:
+            from .muse import MuseAssessor
+
+            assessor = MuseAssessor(live_config, store, fixtures)
+            mode = f"live assessor {assessor.adapter_id}, spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
+        else:
+            assessor = fixed_clean_assessor()
+            mode = "fixture assessor, no inference"
+        service = ForgeVigilService(store, assessor, fixtures=fixtures)
         server = ForgeVigilHTTPServer(service, {token: OPERATOR_ACTOR_ID}, port=0, quiet=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            print("ForgeVigil CP01 smoke demo - fixture assessor, temporary synthetic state, no inference", file=out)
+            print(f"ForgeVigil smoke demo - {mode}, temporary synthetic state", file=out)
+            dispositions = {}
             for expected, payload in CASES:
                 status, body = _post(server.server_port, token, payload)
                 receipt = body.get("receipt", {})
-                ok = receipt.get("disposition") == expected
+                dispositions[expected] = receipt.get("disposition")
+                ok = _case_ok(expected, receipt, live)
                 failures += not ok
                 print(
-                    f"\n[{expected}] HTTP {status} disposition={receipt.get('disposition')} "
+                    f"\n[{expected} case] HTTP {status} disposition={receipt.get('disposition')} "
                     f"reason={receipt.get('reason_code')} delivered={receipt.get('delivered')}"
                     f"{'' if ok else '  <-- UNEXPECTED'}",
                     file=out,
                 )
+                if str(receipt.get("fallback_state", "")).startswith("assessor_failure"):
+                    print(f"  note: the live assessment failed ({receipt.get('reason_code')})", file=out)
                 print(json.dumps(receipt, indent=2, sort_keys=True), file=out)
 
             status, body = _post(server.server_port, token, CASES[0][1])
             replay_ok = body.get("outcome") == "replayed"
             failures += not replay_ok
-            print(f"\n[replay of ALLOW] HTTP {status} outcome={body.get('outcome')} (no new assessment or delivery)", file=out)
+            print(f"\n[replay of ALLOW case] HTTP {status} outcome={body.get('outcome')} (no new assessment or delivery)", file=out)
 
             items = store.outbox_items()
-            exact = len(items) == 1 and items[0].body == PUBLIC_SPEC_CONTENT
+            expected_items = 1 if dispositions.get("ALLOW") == "ALLOW" else 0
+            exact = len(items) == expected_items and all(
+                item.body == PUBLIC_SPEC_CONTENT and item.request_id == "demo-allow-1" for item in items
+            )
             failures += not exact
-            print(f"\noutbox items: {len(items)} (expected 1, body = approved public-spec bytes: {exact})", file=out)
+            print(f"\noutbox items: {len(items)} (expected {expected_items}; only approved public-spec bytes: {exact})", file=out)
+            if live:
+                spent = format_usd(store.committed_spend_nanousd())
+                print(f"live spend recorded: {spent} USD (calls with unknown usage count their full reservation)", file=out)
         finally:
             server.shutdown()
             server.server_close()

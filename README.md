@@ -1,24 +1,27 @@
 # ForgeVigil
 
-A standalone, portable agentic business protection system for small operators who use AI.
-Direction: a model *advises* on each request, and deterministic code *decides*. The model cannot grant
-capabilities, delivery goes only to a local outbox, and every result leaves a durable receipt.
+An agentic business-protection system for small operators who use AI, built around Meta's Muse models.
+A model *investigates and advises* on each request, and deterministic code *decides*. The model cannot
+grant capabilities, delivery goes only to a local outbox, and every result leaves a durable receipt.
 
-## Status: Checkpoint 01 (fixture mode)
+## Status
 
-One authenticated request → fixed advisory assessment → deterministic permission → **exactly one**
-allowed outbox item **or** no delivery → durable receipt. Duplicate, concurrent, crash and restart
-behaviour is covered by system tests.
+- **Checkpoint 01:** one authenticated request → advisory assessment → deterministic permission →
+  **exactly one** allowed outbox item **or** no delivery → durable receipt. System tests cover duplicate,
+  concurrent, crash and restart behaviour.
+- **Checkpoint 02:** a live Muse assessor using the Meta Model API. It investigates with bounded
+  read-only tools. Code checks everything it cites (the false-positive check), and a hard spend cap is
+  reserved before every model call. It is built and tested against a local fake of the API and **has not
+  yet been run against the real API**.
 
-What this checkpoint does **not** establish: live model inference of any kind, agentic
-capability, prompt-injection resistance, model accuracy, paid-usage budgeting, or hosting readiness.
-The assessor is a labelled fixed fixture that does not analyze content.
+Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
+evaluation), the model's own resistance to prompt injection, and readiness for hosting.
 
-## Quick start (Python 3 standard library only; verified on 3.13)
+## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # system tests (temporary state only)
-python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo on temporary state
+python3 -m unittest discover -s tests -t . -v   # 35 system tests; temporary state, no network, no spend
+python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -26,6 +29,58 @@ python3 -m forge_vigil serve --db var/forgevigil.sqlite3 --port 8787
 ```
 
 The server refuses to start without a token of at least 32 characters. There is no built-in default.
+
+## Live Muse assessor (Checkpoint 02)
+
+Live mode is off unless you choose it. `serve` and `demo` both accept `--assessor muse`, and both refuse
+to start without these settings:
+
+| Setting | Meaning |
+|---|---|
+| `MODEL_API_KEY` | Meta Model API key. Set it in your own shell or environment settings. Never commit it or paste it into a chat. |
+| `FORGEVIGIL_SPEND_CAP_USD` | Required. Hard cap on the spend recorded in the database, for example `2.00`. |
+| `FORGEVIGIL_MUSE_MODEL` | Optional. Default `muse-spark-1.1`. |
+| `FORGEVIGIL_MUSE_BASE_URL` | Optional. Default `https://api.meta.ai/v1`. |
+| `FORGEVIGIL_PRICE_INPUT_USD_PER_M`, `FORGEVIGIL_PRICE_OUTPUT_USD_PER_M` | Optional. Defaults `1.25` and `4.25` (reported launch prices; check your account). |
+
+Windows PowerShell, from the repo folder. The key is typed into a masked prompt, so it never appears in
+your command history:
+
+```powershell
+$env:MODEL_API_KEY = [System.Net.NetworkCredential]::new("", (Read-Host "Meta Model API key" -AsSecureString)).Password
+$env:FORGEVIGIL_SPEND_CAP_USD = "2.00"
+.\.venv\Scripts\python.exe -m forge_vigil demo --assessor muse
+```
+
+The live demo checks safety invariants rather than exact verdicts, because the model's judgement can vary:
+- The restricted document is denied without a model call.
+- The unknown approval is never allowed.
+- At most one outbox item exists, and it contains only the approved bytes.
+
+At the end it prints the spend that was recorded.
+
+**How a live assessment runs**
+1. Code denies out-of-scope actors, documents and recipients before Muse is ever called.
+2. Muse receives the request as JSON-encoded, untrusted data. It may call three read-only tools:
+   `lookup_approval`, `get_document_facts` and `get_recipient_facts`. After 4 tool calls or 4 model calls
+   it must answer.
+3. Its answer must match a strict JSON schema. Code sets the schema and status fields; the model never does.
+4. **False-positive check:** a threat finding only becomes BLOCK if code can confirm everything it cites.
+   Quotes must appear in the request. Registry, document and recipient claims must match the server's
+   facts. The finding must cite something the requester actually wrote. Anything else goes to REVIEW
+   (`THREAT_EVIDENCE_UNVERIFIED`). An unknown approval reference is never treated as manipulation on its own.
+5. **Spend:** before each call, the worst-case cost is reserved in SQLite against the cap. That cost is
+   the request size plus maximum output tokens, at the configured prices. A call that doesn't fit is never
+   made (`ASSESSMENT_BUDGET_EXHAUSTED`). Afterwards the reservation settles to the token counts the
+   provider reports. When usage is unknown, the full reservation stays counted. One call can still exceed
+   its estimate (for example through hidden reasoning tokens); any overrun is recorded at its actual cost.
+6. **Receipt:** it records the adapter and prompt version, every evidence-check result (quotes as hashes
+   only), the token counts and the cost.
+
+**Transport rules:**
+- HTTPS only. Plain HTTP is allowed only for a loopback test server.
+- Redirects are refused, so the key can't be forwarded to another host.
+- Responses are size-capped, and each socket operation has a timeout.
 
 ## API
 
@@ -36,24 +91,24 @@ The server refuses to start without a token of at least 32 characters. There is 
  "approval_ref": "HR-2026-118", "message": "Please send the public spec."}
 ```
 
-- `approval_ref` is optional; leaving it out is the same as `null`. No other fields are accepted, so
-  a client cannot submit an actor, policy or assessment. The actor always comes from the token.
+- `approval_ref` is optional; leaving it out is the same as `null`. No other fields are accepted, so a
+  client cannot submit an actor, policy or assessment. The actor always comes from the token.
 - IDs must match `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, which rules out paths and URLs. `message` must be
-  1–2000 characters. Bodies are capped at 16 KiB before reading, and duplicate JSON keys are rejected.
+  1–2000 characters. Bodies are capped at 16 KiB before they are read, and duplicate JSON keys are rejected.
 
 | Result | HTTP | Delivery |
 |---|---|---|
 | ALLOW: actor, document, recipient and verified approval all permit, and the assessment completed clean | 200 | one outbox item containing the approved document bytes |
-| BLOCK: the assessment reports a supported threat finding | 403 | none |
+| BLOCK: the assessment reports a threat and code confirmed its evidence | 403 | none |
 | DENY: actor, document or recipient out of scope (no intent is inferred) | 403 | none |
-| REVIEW: approval missing or unverified, assessment invalid or failed, processing failure, or work interrupted | 202 | none |
+| REVIEW: approval missing or unverified, threat evidence unconfirmed, assessment invalid or failed, budget exhausted, or work interrupted | 202 | none |
 | Same `request_id` and same payload | original status, `"outcome": "replayed"` | none (recorded receipt returned) |
 | Same `request_id` with a different payload | 409 `request_id_conflict` | none |
 | Earlier attempt still in progress | 409 `request_in_progress` | none |
 | Intent or receipt could not be recorded | 503 `audit_unavailable` | none |
 | Bad schema / no auth / no length / too large / wrong type | 400 / 401 / 411 / 413 / 415 | none |
 
-`GET /health` returns `{"status": "ok", "mode": "fixture"}`.
+`GET /health` returns `{"status": "ok", "mode": "fixture"}`, or `"mode": "live"` when the Muse assessor is in use.
 
 ## Fictional fixtures (server-owned)
 
@@ -64,8 +119,8 @@ The server refuses to start without a token of at least 32 characters. There is 
 | Recipients | `supplier` (approved), `unvetted-vendor` (not approved) |
 | Approval | `HR-2026-118` binds operator + public-spec + supplier |
 
-An approval reference that isn't in the registry (for example `HR-2026-999`) is treated as
-*unverified* and goes to REVIEW. It is never reported as forged.
+An approval reference that isn't in the registry (for example `HR-2026-999`) is treated as *unverified*
+and goes to REVIEW. It is never reported as forged.
 
 ## Layout
 
@@ -73,11 +128,16 @@ An approval reference that isn't in the registry (for example `HR-2026-999`) is 
 |---|---|
 | `forge_vigil/schema.py` | strict request parsing, input digest |
 | `forge_vigil/fixtures.py` | frozen, server-owned fictional fixtures |
-| `forge_vigil/assessment.py` | assessor interface, fixed fixture assessors, output validation |
+| `forge_vigil/assessment.py` | assessor interface, fixture assessors, output validation, usage |
+| `forge_vigil/muse.py` | live Muse assessor: Meta Model API transport, tool loop, spend reservations |
+| `forge_vigil/investigation.py` | the read-only tools Muse may call, and the facts behind them |
+| `forge_vigil/evidence.py` | the false-positive check: confirms quotes and cited facts |
+| `forge_vigil/budget.py` | pricing and worst-case cost arithmetic (integer nano-USD) |
 | `forge_vigil/policy.py` | deterministic permission (the only code that can produce ALLOW), policy digest |
-| `forge_vigil/store.py` | SQLite intents, receipts and outbox; append-only triggers |
+| `forge_vigil/store.py` | SQLite intents, receipts, outbox and spend ledger; append-only triggers |
 | `forge_vigil/service.py` | idempotent orchestration, atomic completion, restart recovery |
 | `forge_vigil/http_api.py` | localhost HTTP adapter, bearer authentication, transport limits |
-| `tests/` | system tests over real SQLite files and a real local server |
+| `forge_vigil/demo.py` | the smoke demo, with fixture and live modes |
+| `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
