@@ -49,7 +49,8 @@ def answer(
 
 
 def tool_calls(*calls, prompt_tokens: int = 800, completion_tokens: int = 40) -> dict:
-    """Each call is (name, arguments); dict arguments are JSON-encoded, strings are sent as-is."""
+    """Each call is (name, arguments); dict arguments are JSON-encoded, strings are sent as-is.
+    Like the real API (seen in live runs), a tool-calling reply finishes with "tool_calls"."""
     message = {
         "role": "assistant",
         "content": None,
@@ -62,7 +63,7 @@ def tool_calls(*calls, prompt_tokens: int = 800, completion_tokens: int = 40) ->
             for index, (name, args) in enumerate(calls, 1)
         ],
     }
-    return completion(message, prompt_tokens, completion_tokens)
+    return completion(message, prompt_tokens, completion_tokens, finish_reason="tool_calls")
 
 
 class Reply:

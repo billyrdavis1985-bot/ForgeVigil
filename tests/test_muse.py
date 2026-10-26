@@ -22,7 +22,7 @@ from forge_vigil.budget import parse_usd
 from forge_vigil.demo import run_demo
 from forge_vigil.errors import ConfigError
 from forge_vigil.fixtures import default_fixtures
-from forge_vigil.muse import MuseAssessor, MuseConfig
+from forge_vigil.muse import TRUNCATION_RETRY_PROMPT, MuseAssessor, MuseConfig
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService
 from forge_vigil.store import Store
@@ -71,7 +71,7 @@ class LiveAssessorTests(_MuseTest):
         self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("ALLOW", "ALL_CHECKS_PASSED"))
         self.assertEqual(service.assessor_mode, "live")  # what GET /health reports
         self.assertEqual(receipt["assessment"]["adapter_id"], "muse.muse-spark-1.1")
-        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v2")
+        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v3")
         # 1000 x $1.25/M + 100 x $4.25/M = $0.001675
         self.assertEqual(
             receipt["usage"],
@@ -198,31 +198,32 @@ class LiveAssessorTests(_MuseTest):
     def test_unusable_answers_get_specific_codes_and_shape_only_diagnostics(self):
         message = valid_payload()["message"]
         plain = ["content", "role"]
+        cut_off = fake.completion({"role": "assistant", "content": '{"threat_finding": "no'}, finish_reason="length")
         cases = {
+            # Cut off twice: the one retry is used up, so the case is held.
             "cut off at the token limit": (
-                fake.completion({"role": "assistant", "content": '{"threat_finding": "no'}, finish_reason="length"),
-                "ASSESSMENT_MODEL_OUTPUT_TRUNCATED", "invalid_json", "length", plain,
+                [cut_off, cut_off], "ASSESSMENT_MODEL_OUTPUT_TRUNCATED", "invalid_json", ["length", "length"], plain,
             ),
             "empty, reasoning only": (
-                fake.completion({"role": "assistant", "content": None, "reasoning_content": "thinking about it"}),
-                "ASSESSMENT_MODEL_OUTPUT_EMPTY", "empty", "stop", ["content", "reasoning_content", "role"],
+                [fake.completion({"role": "assistant", "content": None, "reasoning_content": "thinking about it"})],
+                "ASSESSMENT_MODEL_OUTPUT_EMPTY", "empty", ["stop"], ["content", "reasoning_content", "role"],
             ),
             "prose echoing the request": (
-                fake.completion({"role": "assistant", "content": "This request says: " + message}),
-                "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "non_json_text", "stop", plain,
+                [fake.completion({"role": "assistant", "content": "This request says: " + message})],
+                "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "non_json_text", ["stop"], plain,
             ),
             "JSON that is not an object": (
-                fake.completion({"role": "assistant", "content": "[1, 2]"}),
-                "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "json_not_object", "stop", plain,
+                [fake.completion({"role": "assistant", "content": "[1, 2]"})],
+                "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "json_not_object", ["stop"], plain,
             ),
             "refusal": (
-                fake.completion({"role": "assistant", "content": None, "refusal": "I can't help with that."}),
-                "ASSESSMENT_MODEL_REFUSED", "refusal", "stop", ["content", "refusal", "role"],
+                [fake.completion({"role": "assistant", "content": None, "refusal": "I can't help with that."})],
+                "ASSESSMENT_MODEL_REFUSED", "refusal", ["stop"], ["content", "refusal", "role"],
             ),
         }
-        for index, (name, (reply, reason, shape, finish, fields)) in enumerate(cases.items()):
+        for index, (name, (replies, reason, shape, finishes, fields)) in enumerate(cases.items()):
             with self.subTest(name):
-                self.api.script(reply)
+                self.api.script(*replies)
                 db_name = f"answer-{index}.sqlite3"
                 service = self.service(db_name=db_name)
                 receipt = self.submit(service)
@@ -230,13 +231,37 @@ class LiveAssessorTests(_MuseTest):
                 diagnostics = receipt["assessment"]["diagnostics"]
                 self.assertEqual(
                     (diagnostics["answer_shape"], diagnostics["finish_reasons"], diagnostics["message_fields"]),
-                    (shape, [finish], fields),
+                    (shape, finishes, fields),
                 )
                 self.assertEqual(receipt["usage"]["status"], "metered")
                 self.assertEqual(service.store.table_counts()["outbox"], 0)
                 # Diagnostics describe the reply's shape; its text is never kept.
                 self.assertNotIn("This request says", json.dumps(receipt))
                 self.assertNotIn(message, dump_all_rows(self.tmp / db_name))
+
+    def test_cut_off_answer_gets_one_retry_without_tools(self):
+        cut_off = fake.completion({"role": "assistant", "content": '{"threat_finding": "thr'},
+                                  completion_tokens=4096, finish_reason="length")
+        self.api.script(
+            fake.tool_calls(("lookup_approval", {"approval_ref": "HR-2026-118"})),
+            cut_off,
+            fake.answer(evidence_refs=["registry:HR-2026-118:active_binds_request"]),
+        )
+        service = self.service()
+        receipt = self.submit(service)
+
+        self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("ALLOW", "ALL_CHECKS_PASSED"))
+        diagnostics = receipt["assessment"]["diagnostics"]
+        self.assertEqual(
+            (diagnostics["model_calls"], diagnostics["finish_reasons"], diagnostics["answer_retries"]),
+            (3, ["tool_calls", "length", "stop"], 1),
+        )
+        retry = self.api.requests[2]["body"]
+        self.assertEqual(retry["messages"][-1], {"role": "user", "content": TRUNCATION_RETRY_PROMPT})
+        self.assertEqual(retry["tool_choice"], "none")  # the retry asks for the answer only
+        # All three calls are metered: 800 + 1000 + 1000 input, 40 + 4096 + 100 output tokens.
+        self.assertEqual((receipt["usage"]["input_tokens"], receipt["usage"]["output_tokens"]), (2800, 4236))
+        self.assertEqual([entry["state"] for entry in service.store.spend_entries()], ["settled"] * 3)
 
     def test_clean_answers_may_cite_nothing_but_threats_must_cite_evidence(self):
         self.api.script(fake.answer(evidence_refs=[]))

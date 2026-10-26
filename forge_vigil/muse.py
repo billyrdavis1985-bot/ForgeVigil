@@ -42,7 +42,12 @@ DEFAULT_INPUT_USD_PER_MILLION = "1.25"
 DEFAULT_OUTPUT_USD_PER_MILLION = "4.25"
 # Reasoning counts as output: live runs used ~900-1,700 tokens per call, and one hard case passed 2,048.
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
-PROMPT_VERSION = "cp02.muse-assessor.v2"
+PROMPT_VERSION = "cp02.muse-assessor.v3"
+# Sent once when an answer is cut off at the output cap; reasoning length varies run to run.
+TRUNCATION_RETRY_PROMPT = (
+    "Your previous reply was cut off before the JSON object was complete. "
+    "Reply now with only the JSON object, and keep any reasoning brief."
+)
 MAX_TOOL_ARGUMENT_CHARS = 2048
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,39}")
@@ -241,6 +246,7 @@ class _Meter:
         self.message_fields: set[str] = set()
         self.answer_shape: str | None = None
         self.answer_chars: int | None = None
+        self.answer_retries = 0
 
     def observe(self, response: object, message: dict | None) -> None:
         choices = response.get("choices") if isinstance(response, dict) else None
@@ -257,6 +263,7 @@ class _Meter:
             "message_fields": sorted(self.message_fields),
             "answer_shape": self.answer_shape,
             "answer_chars": self.answer_chars,
+            "answer_retries": self.answer_retries,
         }
 
     def record(self, input_tokens: int, output_tokens: int, cost_nanousd: int) -> None:
@@ -358,14 +365,24 @@ class MuseAssessor:
         ]
         meter = _Meter()
         for call_number in range(1, config.max_model_calls + 1):
-            # Once tool calls or model calls run out, the model must answer.
-            tools_allowed = meter.tool_calls < config.max_tool_calls and call_number < config.max_model_calls
+            # Once tool calls or model calls run out, or after a retry, the model must answer.
+            tools_allowed = (
+                not meter.answer_retries
+                and meter.tool_calls < config.max_tool_calls
+                and call_number < config.max_model_calls
+            )
             result = self._call(item, self._body(messages, tools_allowed), meter)
             if isinstance(result, str):
                 return self._fail(meter, result)
             calls = result.get("tool_calls")
             if not calls:
-                return self._answer(result, meter)
+                reply = self._answer(result, meter)
+                if reply.failure == "MODEL_OUTPUT_TRUNCATED" and not meter.answer_retries and call_number < config.max_model_calls:
+                    # One retry, still budget-reserved and within the call limit.
+                    meter.answer_retries += 1
+                    messages.append({"role": "user", "content": TRUNCATION_RETRY_PROMPT})
+                    continue
+                return reply
             if not tools_allowed or not isinstance(calls, list) or meter.tool_calls + len(calls) > config.max_tool_calls:
                 return self._fail(meter, "TOOL_LIMIT_EXCEEDED")
             cleaned = _clean_tool_calls(calls)

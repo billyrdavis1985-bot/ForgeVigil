@@ -20,6 +20,8 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   run through the real service. It checks the safety rules and measures detection and false-positive rates.
   In the first live run (0.3.0), Muse flagged 6 of 7 attacks, with none delivered, and wrongly flagged
   none of the 6 benign requests. There were 2 model failures, both fixed in 0.3.1. Spend was $0.13.
+  A full single run on 0.4.0 blocked 6 of 7 attacks, delivered none, wrongly flagged no benign request,
+  and had one answer cut off at the output cap. 0.4.1 retries such an answer once. Spend was $0.14.
 - **Checkpoint 04:** operator review, the human side of the system. `review release` delivers a held
   REVIEW case after re-running the scope checks; BLOCK cases can only be confirmed or marked as false
   positives. Every decision gets its own receipt. Review is a local command only, never over HTTP.
@@ -30,7 +32,7 @@ evaluation), the model's own resistance to prompt injection, and readiness for h
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 55 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 56 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -78,6 +80,8 @@ At the end it prints the spend that was recorded.
    `lookup_approval`, `get_document_facts` and `get_recipient_facts`. After 4 tool calls or 4 model calls
    it must answer.
 3. Its answer must match a strict JSON schema. Code sets the schema and status fields; the model never does.
+   If an answer is cut off at the output cap, Muse gets one more call, with no tools, asking for just the
+   JSON. That call is budget-reserved like the others and counts toward the 4-call limit.
 4. **False-positive check:** a threat finding only becomes BLOCK if code can confirm everything it cites.
    Quotes must appear in the request. Registry, document and recipient claims must match the server's
    facts. The finding must cite something the requester actually wrote. Anything else goes to REVIEW
