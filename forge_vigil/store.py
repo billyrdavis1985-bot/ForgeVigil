@@ -387,6 +387,13 @@ class Store:
             ).fetchone()
         return json.loads(row[0]) if row else None
 
+    def get_review(self, actor_id: str, request_id: str) -> dict | None:
+        with self._reader() as conn:
+            row = conn.execute(
+                "SELECT review_json FROM reviews WHERE actor_id = ? AND request_id = ?", (actor_id, request_id)
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
     def record_review(self, review: dict, outbox: OutboxItem | None) -> None:
         """Atomically record an operator decision and, for a release, its single outbox item.
 

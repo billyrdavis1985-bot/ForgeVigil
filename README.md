@@ -28,14 +28,18 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 05:** closing the loop. Replaying a request now shows any operator decision on it, so
   a requester learns that a held request was later released. A read-only `report` command summarises a
   database: outcomes, deliveries, pending reviews, false-positive marks, model failures and spend.
+- **Checkpoint 06:** measuring the model properly. The evaluation grows from 16 to 43 cases, many of them
+  benign requests that sound alarming. `eval --repeat N` shows which verdicts change from run to run.
+  `review export` turns your decisions into labelled cases.
 
-Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
-evaluation), the model's own resistance to prompt injection, and readiness for hosting.
+Not established yet: Muse's detection quality and false-positive rate at a meaningful scale (43 cases
+is still small, and verdicts vary between runs), the model's own resistance to prompt injection beyond
+these cases, and readiness for hosting.
 
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 62 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 70 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -105,14 +109,28 @@ At the end it prints the spend that was recorded.
 - Redirects are refused, so the key can't be forwarded to another host.
 - Responses are size-capped, and each socket operation has a timeout.
 
-## Evaluation (Checkpoint 03)
+## Evaluation (Checkpoints 03 and 06)
 
-`python -m forge_vigil eval` runs the 16 cases in `forge_vigil/eval_cases.json` through the real
-service on throwaway state:
-- **6 benign requests,** including mild urgency and informal wording, to measure false positives.
-- **7 attacks:** prompt injection three ways (direct, a fake system message, in Spanish), pressure to skip
-  checks, impersonation, a data-exfiltration ask, and a fake verbal approval.
-- **3 out-of-scope requests** that code must deny without calling the model.
+`python -m forge_vigil eval` runs the 43 cases in `forge_vigil/eval_cases.json` (set `cp06.eval.v1`)
+through the real service on throwaway state. The 16 Checkpoint 03 cases are still in it unchanged, so
+results stay comparable.
+- **17 benign requests.** Many deliberately sound alarming, to measure false positives: urgency, security
+  vocabulary, a phishing warning, a mention of the CEO, a message that names the restricted worksheet
+  only to exclude it, a forwarded quote, and Spanish.
+- **19 attacks:**
+  - prompt injection: direct, a fake system message, Spanish, a hidden "assessor note", role-play,
+    a ready-made answer, and base64;
+  - pressure and impersonation;
+  - data exfiltration, including a request split into steps;
+  - a changed delivery address;
+  - changed bank details;
+  - a request for portal credentials;
+  - verbal, amended, reused and blanket approvals;
+  - pressure on the operator to release a held request.
+- **7 out-of-scope requests** that code must deny without calling the model.
+
+A test checks every case's label and expected outcome against the deterministic policy, so a
+mislabelled case fails the suite before it can cost money.
 
 It prints one line per case and then a summary. That summary separates two things:
 - **Safety rules, which must never break:** out-of-scope requests are denied without a model call, and
@@ -121,11 +139,12 @@ It prints one line per case and then a summary. That summary separates two thing
   findings held by the false-positive check; model failures; and spend. These describe the model and
   can vary between runs.
 
-The fixture baseline flags nothing, so 6 of the 7 attacks are delivered: they're dressed as fully
-approved requests, and catching them is the model's job. A live run makes 13 Muse calls, costing
-roughly $0.10–0.15 at the reported prices:
+The fixture baseline flags nothing, so 17 of the 19 attacks are delivered: they're dressed as fully
+approved requests, and catching them is the model's job. A live run makes 36 Muse assessments. At the
+Checkpoint 03 rate of about $0.011 each, that's roughly $0.40:
 
 ```powershell
+$env:FORGEVIGIL_SPEND_CAP_USD = "0.75"
 $out = Join-Path ([Environment]::GetFolderPath("Desktop")) "forgevigil-eval.txt"
 .\.venv\Scripts\python.exe -m forge_vigil eval --assessor muse *> $out
 notepad $out
@@ -138,6 +157,24 @@ or `model failure (<cause>)`, where the cause is the validation error or the rep
 shape. A case only counts as correct when its disposition is right *and* the model didn't fail.
 Use `--case <id>` (repeatable) to re-run only the cases you care about, for example
 `eval --assessor muse --case attack-impersonation`.
+
+**Stability:** `--repeat N` (1–10) runs every case N times, one full pass after another, so a spend cap
+that runs out affects every case alike. It then lists each model-assessed case whose disposition or
+finding changed between runs, for example `unstable: attack-verbal-approval: REVIEW/none, BLOCK/threat`.
+A failed run counts as a change. Cost grows with N: `--repeat 3` is about $1.20, so set the cap to about $2.00.
+
+**Your decisions as cases:** `review export` turns a decided request into a labelled case:
+- **Labels:** `false-positive` and `release` mean benign, and `confirm` means attack. A `reject` doesn't
+  say which, so it needs `--label benign` or `--label attack`.
+- **Message text:** the database holds only a digest of each message, so you supply the original text in
+  a file. It's accepted only if it reproduces the recorded digest exactly. UTF-8 and UTF-16 files, and
+  Windows line endings, are fine.
+- **Storage:** cases go to `var/review_cases.json`, which git ignores because it contains request text.
+
+```powershell
+.\.venv\Scripts\python.exe -m forge_vigil review export <request_id> --message-file message.txt
+.\.venv\Scripts\python.exe -m forge_vigil eval --cases var\review_cases.json
+```
 
 ## Operator review (Checkpoint 04)
 
@@ -155,7 +192,7 @@ database `serve` writes (default `var/forgevigil.sqlite3`; use `--db` for anothe
 | Held as | Allowed decisions | Delivery |
 |---|---|---|
 | REVIEW | `release` or `reject` | `release` delivers the approved document once, after re-checking actor, document and recipient against current server data |
-| BLOCK | `confirm` or `false-positive` | never; `false-positive` marks the finding as wrong, which is tuning data |
+| BLOCK | `confirm` or `false-positive` | never; `false-positive` marks the finding as wrong; `review export` makes it an evaluation case |
 | ALLOW, DENY | none (final) | — |
 
 The rules behind it:
@@ -248,9 +285,10 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/service.py` | idempotent orchestration, atomic completion, restart recovery |
 | `forge_vigil/http_api.py` | localhost HTTP adapter, bearer authentication, transport limits |
 | `forge_vigil/demo.py` | the smoke demo, with fixture and live modes |
-| `forge_vigil/evaluation.py`, `eval_cases.json` | the labelled evaluation and its 16 fictional cases |
+| `forge_vigil/evaluation.py`, `eval_cases.json` | the labelled evaluation, repeat runs, and its 43 fictional cases |
 | `forge_vigil/review.py` | operator review: release, reject, confirm or mark false positives on held cases |
 | `forge_vigil/report.py` | the read-only operator report |
+| `forge_vigil/review_cases.py` | `review export`: decided requests as digest-checked evaluation cases |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).

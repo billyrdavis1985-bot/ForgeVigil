@@ -4,7 +4,8 @@ Runs the fictional cases in `eval_cases.json` through the real service on
 throwaway state. Deterministic expectations are pass/fail: out-of-scope
 requests are denied without a model call, and only approved bytes are ever
 delivered. Detection and false-positive rates are measured, not asserted:
-they describe the model, and they can vary between runs.
+they describe the model, and they can vary between runs. `repeat` runs every
+case several times and reports the cases whose result changed between runs.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import json
 import sys
 import tempfile
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TextIO
 
@@ -26,6 +27,9 @@ from .store import Store
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
 LABELS = ("benign", "attack", "out_of_scope")
 DISPOSITIONS = frozenset({"ALLOW", "BLOCK", "DENY", "REVIEW"})
+MAX_REPEAT = 10
+# Repeat runs suffix the request id with -r2 ... -r10, which must still fit the 64-character id limit.
+MAX_CASE_ID_CHARS = 60
 
 
 @dataclass(frozen=True)
@@ -37,14 +41,27 @@ class EvalCase:
 
 
 def load_case_set(path: Path = CASES_PATH) -> tuple[str, list[EvalCase]]:
-    """Load and validate the cases; every request must pass the real request schema."""
+    """Load and validate the cases; every request must pass the real request schema.
+
+    Any problem, including a malformed file, raises ValueError naming the case."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("version"), str) or not isinstance(data.get("cases"), list):
+        raise ValueError(f"{path} is not an evaluation case set (needs a version and a list of cases)")
     cases, seen = [], set()
-    for entry in data["cases"]:
-        case_id, label, expect = entry["id"], entry["label"], tuple(entry["expect"])
-        if case_id in seen or label not in LABELS or not expect or not set(expect) <= DISPOSITIONS:
+    for index, entry in enumerate(data["cases"]):
+        try:
+            case_id, label, expect = entry["id"], entry["label"], tuple(entry["expect"])
+            request = parse_request(json.dumps({"request_id": case_id, **entry["request"]}).encode("utf-8"))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"invalid evaluation case #{index + 1}: {exc}") from None
+        if (
+            case_id in seen
+            or len(case_id) > MAX_CASE_ID_CHARS
+            or label not in LABELS
+            or not expect
+            or not set(expect) <= DISPOSITIONS
+        ):
             raise ValueError(f"invalid evaluation case {case_id!r}")
-        request = parse_request(json.dumps({"request_id": case_id, **entry["request"]}).encode("utf-8"))
         seen.add(case_id)
         cases.append(EvalCase(case_id, label, expect, request))
     return data["version"], cases
@@ -54,6 +71,7 @@ def load_case_set(path: Path = CASES_PATH) -> tuple[str, list[EvalCase]]:
 class CaseResult:
     case: EvalCase
     receipt: dict
+    run: int = 1
 
     @property
     def disposition(self) -> str:
@@ -102,14 +120,33 @@ class CaseResult:
         return "" if self.as_expected else "unexpected"
 
 
-def run_cases(service: ForgeVigilService, cases: list[EvalCase]) -> list[CaseResult]:
+def run_cases(service: ForgeVigilService, cases: list[EvalCase], repeat: int = 1) -> list[CaseResult]:
+    """One full pass over the cases per run, so a spend cap that runs out affects every case alike."""
     results = []
-    for case in cases:
-        outcome = service.submit(OPERATOR_ACTOR_ID, case.request)
-        if outcome.receipt is None:
-            raise RuntimeError(f"case {case.case_id} produced no receipt ({outcome.kind})")
-        results.append(CaseResult(case, outcome.receipt))
+    for run in range(1, repeat + 1):
+        for case in cases:
+            # Each run needs its own request id; reusing one would replay the first run's receipt.
+            request = case.request if run == 1 else replace(case.request, request_id=f"{case.case_id}-r{run}")
+            outcome = service.submit(OPERATOR_ACTOR_ID, request)
+            if outcome.receipt is None:
+                raise RuntimeError(f"case {case.case_id} run {run} produced no receipt ({outcome.kind})")
+            results.append(CaseResult(case, outcome.receipt, run))
     return results
+
+
+def stability(results: list[CaseResult]) -> dict | None:
+    """Across repeated runs, which model-assessed cases gave different results.
+
+    A result is the disposition plus the model's finding, so a failed run counts as a change.
+    Out-of-scope cases never reach the model and are left out. None for a single run."""
+    runs: dict[str, list[str]] = {}
+    for r in results:
+        if r.case.label != "out_of_scope":
+            runs.setdefault(r.case.case_id, []).append(f"{r.disposition}/{r.finding}")
+    if not runs or max(len(outcomes) for outcomes in runs.values()) < 2:
+        return None
+    unstable = [{"id": case_id, "runs": outcomes} for case_id, outcomes in runs.items() if len(set(outcomes)) > 1]
+    return {"cases": len(runs), "stable": len(runs) - len(unstable), "unstable": unstable}
 
 
 def summarize(results: list[CaseResult], store: Store) -> dict:
@@ -125,7 +162,9 @@ def summarize(results: list[CaseResult], store: Store) -> dict:
             critical.append(f"{item.request_id}: delivered bytes other than the approved public document")
     attack_outcomes = Counter(r.disposition for r in attacks)
     return {
-        "cases": len(results),
+        "cases": len({r.case.case_id for r in results}),
+        "runs": max((r.run for r in results), default=0),
+        "results": len(results),
         "attacks": {
             "total": len(attacks),
             "flagged": sum(r.finding == "threat" for r in attacks),
@@ -146,22 +185,28 @@ def summarize(results: list[CaseResult], store: Store) -> dict:
         "out_of_scope_total": len(out_of_scope),
         "spend_usd": format_usd(store.committed_spend_nanousd()),
         "critical": critical,
+        "stability": stability(results),
     }
 
 
 def format_report(results: list[CaseResult], summary: dict) -> str:
-    header = f"{'case':<28} {'label':<12} {'expected':<13} {'got':<7} {'reason':<36} {'finding':<12} {'cost_usd':>10}"
+    repeated = summary["runs"] > 1
+    names = [f"{r.case.case_id} #{r.run}" if repeated else r.case.case_id for r in results]
+    width = max([28, *map(len, names)])
+    header = f"{'case':<{width}} {'label':<12} {'expected':<13} {'got':<7} {'reason':<36} {'finding':<12} {'cost_usd':>10}"
     lines = [header, "-" * len(header)]
-    for r in results:
+    for name, r in zip(names, results):
         cost = r.receipt["usage"].get("cost_usd") or "unknown"
         flag = f"  <-- {r.flag}" if r.flag else ""
         lines.append(
-            f"{r.case.case_id:<28} {r.case.label:<12} {'/'.join(r.case.expect):<13} {r.disposition:<7} "
+            f"{name:<{width}} {r.case.label:<12} {'/'.join(r.case.expect):<13} {r.disposition:<7} "
             f"{r.receipt['reason_code']:<36} {r.finding:<12} {cost:>10}{flag}"
         )
     a, b = summary["attacks"], summary["benign"]
     lines += [
         "",
+        *([f"Runs:           {summary['runs']} of each case; the counts below cover all {summary['results']} results"]
+          if repeated else []),
         f"Attacks:        {a['flagged']}/{a['total']} flagged as threats "
         f"({a['blocked']} blocked, {a['held_for_review']} held for review, {a['delivered']} delivered); "
         f"{a['model_failures']} model failure(s)",
@@ -174,6 +219,12 @@ def format_report(results: list[CaseResult], summary: dict) -> str:
         f"Spend recorded: {summary['spend_usd']} USD",
         "Critical failures: " + ("none" if not summary["critical"] else "; ".join(summary["critical"])),
     ]
+    steady = summary["stability"]
+    if steady is not None:
+        lines.append(
+            f"Stability:      {steady['stable']}/{steady['cases']} model-assessed cases gave the same result in every run"
+        )
+        lines += [f"  unstable: {entry['id']}: {', '.join(entry['runs'])}" for entry in steady["unstable"]]
     return "\n".join(lines)
 
 
@@ -183,11 +234,15 @@ def run_evaluation(
     json_path: Path | None = None,
     cases_path: Path = CASES_PATH,
     case_ids: list[str] | None = None,
+    repeat: int = 1,
 ) -> int:
     """Exit status 1 only for a broken safety rule; detection misses are reported, not failed.
 
     `case_ids` runs just those cases, for cheap re-runs of the ones that need attention.
+    `repeat` runs every case that many times (1-10) to measure how stable the verdicts are.
     """
+    if not 1 <= repeat <= MAX_REPEAT:
+        raise ValueError(f"--repeat must be 1-{MAX_REPEAT}")
     case_set, cases = load_case_set(cases_path)
     if case_ids:
         unknown = sorted(set(case_ids) - {case.case_id for case in cases})
@@ -205,15 +260,17 @@ def run_evaluation(
             assessor = MuseAssessor(live_config, store, fixtures)
             mode = f"live assessor {assessor.adapter_id}, spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
         service = ForgeVigilService(store, assessor, fixtures=fixtures)
-        print(f"ForgeVigil evaluation {case_set} - {len(cases)} cases, {mode}, temporary state\n", file=out)
-        results = run_cases(service, cases)
+        runs = f" x {repeat} runs" if repeat > 1 else ""
+        print(f"ForgeVigil evaluation {case_set} - {len(cases)} cases{runs}, {mode}, temporary state\n", file=out)
+        results = run_cases(service, cases, repeat)
         summary = dict(summarize(results, store), case_set=case_set)
     print(format_report(results, summary), file=out)
     if json_path is not None:
         report = {
             "summary": summary,
             "cases": [
-                {"id": r.case.case_id, "label": r.case.label, "expect": list(r.case.expect), "receipt": r.receipt}
+                {"id": r.case.case_id, "run": r.run, "label": r.case.label, "expect": list(r.case.expect),
+                 "receipt": r.receipt}
                 for r in results
             ],
         }
