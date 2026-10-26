@@ -40,8 +40,8 @@ DEFAULT_MODEL = "muse-spark-1.1"
 # Reported launch prices for muse-spark-1.1, USD per million tokens. Verify before relying on them.
 DEFAULT_INPUT_USD_PER_MILLION = "1.25"
 DEFAULT_OUTPUT_USD_PER_MILLION = "4.25"
-# The first live run used up to ~1,200 output tokens per assessment: reasoning counts as output.
-DEFAULT_MAX_OUTPUT_TOKENS = 2048
+# Reasoning counts as output: live runs used ~900-1,700 tokens per call, and one hard case passed 2,048.
+DEFAULT_MAX_OUTPUT_TOKENS = 4096
 PROMPT_VERSION = "cp02.muse-assessor.v2"
 MAX_TOOL_ARGUMENT_CHARS = 2048
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")

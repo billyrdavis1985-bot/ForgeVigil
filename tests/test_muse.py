@@ -91,7 +91,7 @@ class LiveAssessorTests(_MuseTest):
             {"lookup_approval", "get_document_facts", "get_recipient_facts"},
         )
         self.assertEqual(body["response_format"]["type"], "json_schema")
-        self.assertEqual(body["max_tokens"], 2048)
+        self.assertEqual(body["max_tokens"], 4096)
         diagnostics = receipt["assessment"]["diagnostics"]
         self.assertEqual(
             {key: diagnostics[key] for key in ("model_calls", "tool_calls", "finish_reasons", "message_fields", "answer_shape")},
@@ -236,6 +236,16 @@ class LiveAssessorTests(_MuseTest):
                 # Diagnostics describe the reply's shape; its text is never kept.
                 self.assertNotIn("This request says", json.dumps(receipt))
                 self.assertNotIn(message, dump_all_rows(self.tmp / db_name))
+
+    def test_clean_answers_may_cite_nothing_but_threats_must_cite_evidence(self):
+        self.api.script(fake.answer(evidence_refs=[]))
+        receipt = self.submit(self.service())
+        self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("ALLOW", "ALL_CHECKS_PASSED"))
+
+        self.api.script(fake.answer("threat", "SOCIAL_ENGINEERING", [], []))
+        receipt = self.submit(self.service(db_name="threat.sqlite3"))
+        self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("REVIEW", "ASSESSMENT_INVALID"))
+        self.assertEqual(receipt["assessment"]["validation_error"], "INVALID_EVIDENCE_REFS")
 
     def test_answer_in_a_markdown_fence_is_accepted(self):
         content = json.loads(fake.answer()["choices"][0]["message"]["content"])
@@ -387,7 +397,7 @@ class LiveSetupTests(_MuseTest):
     def test_live_mode_refuses_unsafe_configuration(self):
         base = {"MODEL_API_KEY": TEST_KEY, "FORGEVIGIL_SPEND_CAP_USD": "2.00"}
         self.assertEqual(MuseConfig.from_env(base).spend_cap_nanousd, 2_000_000_000)
-        self.assertEqual(MuseConfig.from_env(base).max_output_tokens, 2048)
+        self.assertEqual(MuseConfig.from_env(base).max_output_tokens, 4096)
         self.assertEqual(MuseConfig.from_env({**base, "FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS": "4096"}).max_output_tokens, 4096)
         self.assertNotIn(TEST_KEY, repr(MuseConfig.from_env(base)))
         bad = {

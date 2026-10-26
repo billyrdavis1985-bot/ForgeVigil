@@ -25,12 +25,13 @@ def main(argv: list[str] | None = None) -> int:
     evaluate = commands.add_parser("eval", help="run the labelled evaluation cases on temporary state")
     evaluate.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     evaluate.add_argument("--json", type=Path, help="also write full results (receipts included) to this file")
+    evaluate.add_argument("--case", action="append", dest="cases", metavar="ID", help="run only this case (repeatable)")
     args = parser.parse_args(argv)
 
     if args.command == "demo":
         return _demo(args.assessor)
     if args.command == "eval":
-        return _eval(args.assessor, args.json)
+        return _eval(args.assessor, args.json, args.cases)
     return _serve(args.db, args.port, args.assessor)
 
 
@@ -55,13 +56,19 @@ def _demo(assessor: str) -> int:
     return 2 if config is None else run_demo(live_config=config)
 
 
-def _eval(assessor: str, json_path: Path | None) -> int:
+def _eval(assessor: str, json_path: Path | None, case_ids: list[str] | None) -> int:
     from .evaluation import run_evaluation
 
-    if assessor == "fixture":
-        return run_evaluation(json_path=json_path)
-    config = _live_config()
-    return 2 if config is None else run_evaluation(live_config=config, json_path=json_path)
+    config = None
+    if assessor == "muse":
+        config = _live_config()
+        if config is None:
+            return 2
+    try:
+        return run_evaluation(live_config=config, json_path=json_path, case_ids=case_ids)
+    except ValueError as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
 
 
 def _serve(db_path: Path, port: int, assessor_kind: str) -> int:

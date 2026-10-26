@@ -72,6 +72,36 @@ class CaseResult:
     def as_expected(self) -> bool:
         return self.disposition in self.case.expect
 
+    @property
+    def failed(self) -> bool:
+        """The assessment itself failed, so the disposition came from policy alone."""
+        return self.receipt["assessment"]["status"] in _FAILED_STATUSES
+
+    @property
+    def correct(self) -> bool:
+        return self.as_expected and not self.failed
+
+    @property
+    def detail(self) -> str:
+        """Why an assessment failed, from shape-only receipt fields."""
+        assessment = self.receipt["assessment"]
+        if assessment.get("validation_error"):
+            return assessment["validation_error"]
+        diagnostics = assessment.get("diagnostics") or {}
+        finish = (diagnostics.get("finish_reasons") or ["?"])[-1]
+        shape = diagnostics.get("answer_shape")
+        return f"finish={finish}" + (f", answer={shape}" if shape else "")
+
+    @property
+    def flag(self) -> str:
+        if self.failed:
+            return f"model failure ({self.detail})"
+        if self.case.label == "attack" and self.disposition == "ALLOW":
+            return "MISSED (delivered)"
+        if self.case.label == "benign" and self.finding == "threat":
+            return "false positive"
+        return "" if self.as_expected else "unexpected"
+
 
 def run_cases(service: ForgeVigilService, cases: list[EvalCase]) -> list[CaseResult]:
     results = []
@@ -103,11 +133,13 @@ def summarize(results: list[CaseResult], store: Store) -> dict:
             "blocked": attack_outcomes["BLOCK"],
             "held_for_review": attack_outcomes["REVIEW"],
             "delivered": attack_outcomes["ALLOW"],
+            "model_failures": sum(r.failed for r in attacks),
         },
         "benign": {
             "total": len(benign),
             "flagged": sum(r.finding == "threat" for r in benign),
-            "as_expected": sum(r.as_expected for r in benign),
+            "correct": sum(r.correct for r in benign),
+            "model_failures": sum(r.failed for r in benign),
         },
         "unverified_threats_held": sum(r.receipt["reason_code"] == "THREAT_EVIDENCE_UNVERIFIED" for r in results),
         "model_failures": sum(r.receipt["assessment"]["status"] in _FAILED_STATUSES for r in results),
@@ -123,10 +155,7 @@ def format_report(results: list[CaseResult], summary: dict) -> str:
     lines = [header, "-" * len(header)]
     for r in results:
         cost = r.receipt["usage"].get("cost_usd") or "unknown"
-        flag = ""
-        if not r.as_expected:
-            missed = r.case.label == "attack" and r.disposition == "ALLOW"
-            flag = "  <-- MISSED (delivered)" if missed else "  <-- unexpected"
+        flag = f"  <-- {r.flag}" if r.flag else ""
         lines.append(
             f"{r.case.case_id:<28} {r.case.label:<12} {'/'.join(r.case.expect):<13} {r.disposition:<7} "
             f"{r.receipt['reason_code']:<36} {r.finding:<12} {cost:>10}{flag}"
@@ -135,9 +164,10 @@ def format_report(results: list[CaseResult], summary: dict) -> str:
     lines += [
         "",
         f"Attacks:        {a['flagged']}/{a['total']} flagged as threats "
-        f"({a['blocked']} blocked, {a['held_for_review']} held for review, {a['delivered']} delivered)",
+        f"({a['blocked']} blocked, {a['held_for_review']} held for review, {a['delivered']} delivered); "
+        f"{a['model_failures']} model failure(s)",
         f"Benign:         {b['flagged']}/{b['total']} wrongly flagged as threats; "
-        f"{b['as_expected']}/{b['total']} got their expected disposition",
+        f"{b['correct']}/{b['total']} correct; {b['model_failures']} model failure(s)",
         f"False-positive check: {summary['unverified_threats_held']} unconfirmed threat finding(s) held for review",
         f"Model failures: {summary['model_failures']}",
         f"Out of scope:   {summary['out_of_scope_denied_without_model']}/{summary['out_of_scope_total']} "
@@ -149,10 +179,22 @@ def format_report(results: list[CaseResult], summary: dict) -> str:
 
 
 def run_evaluation(
-    out: TextIO = sys.stdout, live_config=None, json_path: Path | None = None, cases_path: Path = CASES_PATH
+    out: TextIO = sys.stdout,
+    live_config=None,
+    json_path: Path | None = None,
+    cases_path: Path = CASES_PATH,
+    case_ids: list[str] | None = None,
 ) -> int:
-    """Exit status 1 only for a broken safety rule; detection misses are reported, not failed."""
+    """Exit status 1 only for a broken safety rule; detection misses are reported, not failed.
+
+    `case_ids` runs just those cases, for cheap re-runs of the ones that need attention.
+    """
     case_set, cases = load_case_set(cases_path)
+    if case_ids:
+        unknown = sorted(set(case_ids) - {case.case_id for case in cases})
+        if unknown:
+            raise ValueError("unknown case id(s): " + ", ".join(unknown))
+        cases = [case for case in cases if case.case_id in set(case_ids)]
     with tempfile.TemporaryDirectory(prefix="forgevigil-eval-") as tmp:
         store = Store(Path(tmp) / "eval.sqlite3")
         fixtures = default_fixtures()

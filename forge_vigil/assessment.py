@@ -157,7 +157,8 @@ def validate_assessment(output: object) -> Assessment:
     if not isinstance(reason_code, str) or not _REASON_CODE.fullmatch(reason_code):
         raise InvalidAssessment("INVALID_REASON_CODE")
     refs = output["evidence_refs"]
-    if not isinstance(refs, list) or not 1 <= len(refs) <= MAX_EVIDENCE_REFS:
+    # A threat must cite evidence; a clean ("none") finding may cite nothing, since it can never block.
+    if not isinstance(refs, list) or len(refs) > MAX_EVIDENCE_REFS or (not refs and finding == "threat"):
         raise InvalidAssessment("INVALID_EVIDENCE_REFS")
     if any(not isinstance(ref, str) or not _EVIDENCE_REF.fullmatch(ref) for ref in refs) or len(set(refs)) != len(refs):
         raise InvalidAssessment("INVALID_EVIDENCE_REFS")

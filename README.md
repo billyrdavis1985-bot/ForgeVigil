@@ -18,6 +18,8 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   evidence-checked answers for both live cases.
 - **Checkpoint 03:** a labelled evaluation of 16 fictional cases (6 benign, 7 attacks, 3 out of scope),
   run through the real service. It checks the safety rules and measures detection and false-positive rates.
+  In the first live run (0.3.0), Muse flagged 6 of 7 attacks, with none delivered, and wrongly flagged
+  none of the 6 benign requests. There were 2 model failures, both fixed in 0.3.1. Spend was $0.13.
 
 Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
 evaluation), the model's own resistance to prompt injection, and readiness for hosting.
@@ -25,7 +27,7 @@ evaluation), the model's own resistance to prompt injection, and readiness for h
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 41 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 44 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 
@@ -47,7 +49,7 @@ to start without these settings:
 | `FORGEVIGIL_SPEND_CAP_USD` | Required. Hard cap on the spend recorded in the database, for example `2.00`. |
 | `FORGEVIGIL_MUSE_MODEL` | Optional. Default `muse-spark-1.1`. |
 | `FORGEVIGIL_MUSE_BASE_URL` | Optional. Default `https://api.meta.ai/v1`. |
-| `FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS` | Optional. Default `2048`. Muse's reasoning counts as output, so a low value cuts answers off. |
+| `FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS` | Optional. Default `4096`. Muse's reasoning counts as output, so a low value cuts answers off. |
 | `FORGEVIGIL_PRICE_INPUT_USD_PER_M`, `FORGEVIGIL_PRICE_OUTPUT_USD_PER_M` | Optional. Defaults `1.25` and `4.25` (reported launch prices; check your account). |
 
 Windows PowerShell, from the repo folder. The key is typed into a masked prompt, so it never appears in
@@ -118,6 +120,12 @@ notepad $out
 ```
 
 Add `--json <path>` to save every receipt as well. Reports never contain request text or the API key.
+
+Each line is marked when something needs attention: `MISSED (delivered)`, `false positive`, `unexpected`,
+or `model failure (<cause>)`, where the cause is the validation error or the reply's finish reason and
+shape. A case only counts as correct when its disposition is right *and* the model didn't fail.
+Use `--case <id>` (repeatable) to re-run only the cases you care about, for example
+`eval --assessor muse --case attack-impersonation`.
 
 ## API
 

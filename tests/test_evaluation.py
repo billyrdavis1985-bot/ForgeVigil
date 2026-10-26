@@ -66,14 +66,43 @@ class EvaluationTests(unittest.TestCase):
 
         self.assertEqual(len(api.requests), 13)  # the 3 out-of-scope cases never reach the model
         self.assertEqual(
-            summary["attacks"], {"total": 7, "flagged": 7, "blocked": 7, "held_for_review": 0, "delivered": 0}
+            summary["attacks"],
+            {"total": 7, "flagged": 7, "blocked": 7, "held_for_review": 0, "delivered": 0, "model_failures": 0},
         )
-        self.assertEqual(summary["benign"], {"total": 6, "flagged": 0, "as_expected": 6})
+        self.assertEqual(summary["benign"], {"total": 6, "flagged": 0, "correct": 6, "model_failures": 0})
         self.assertEqual(
             (summary["out_of_scope_denied_without_model"], summary["model_failures"], summary["critical"]), (3, 0, [])
         )
         self.assertEqual(summary["spend_usd"], format_usd(13 * 1_675_000))
         self.assertTrue(all(result.as_expected for result in results))
+
+    def test_model_failures_are_counted_apart_from_correct_results(self):
+        api = fake.FakeMuseAPI()
+        self.addCleanup(api.close)
+        _, cases = load_case_set()
+        chosen = {case.case_id: case for case in cases}
+        subset = [chosen["benign-missing-approval"], chosen["attack-impersonation"]]
+        api.script(
+            fake.answer(evidence_refs=["registry::missing"]),  # fails validation: malformed evidence ref
+            fake.completion({"role": "assistant", "content": '{"threat_finding": "thr'}, finish_reason="length"),
+        )
+        store = Store(self.tmp / "failures.sqlite3")
+        fixtures = default_fixtures()
+        config = MuseConfig(
+            api_key=TEST_KEY, spend_cap_nanousd=parse_usd("1.00", name="cap"), base_url=api.base_url, timeout_s=2.0
+        )
+        results = run_cases(ForgeVigilService(store, MuseAssessor(config, store, fixtures), fixtures=fixtures), subset)
+        summary = summarize(results, store)
+
+        # Policy still reached REVIEW for the missing approval, but that is not a correct model result.
+        self.assertTrue(results[0].as_expected)
+        self.assertFalse(results[0].correct)
+        self.assertEqual(summary["benign"], {"total": 1, "flagged": 0, "correct": 0, "model_failures": 1})
+        self.assertEqual((summary["attacks"]["model_failures"], summary["attacks"]["delivered"]), (1, 0))
+        self.assertEqual(
+            [result.flag for result in results],
+            ["model failure (INVALID_EVIDENCE_REFS)", "model failure (finish=length, answer=invalid_json)"],
+        )
 
     def test_broken_safety_rules_are_reported_as_critical(self):
         _, cases = load_case_set()
@@ -98,13 +127,29 @@ class EvaluationTests(unittest.TestCase):
             cwd=REPO_ROOT, capture_output=True, text=True, timeout=60,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("Attacks:        0/7 flagged as threats (0 blocked, 1 held for review, 6 delivered)", proc.stdout)
+        self.assertIn(
+            "Attacks:        0/7 flagged as threats (0 blocked, 1 held for review, 6 delivered); 0 model failure(s)",
+            proc.stdout,
+        )
         self.assertIn("Out of scope:   3/3 denied without calling the model", proc.stdout)
         self.assertIn("Critical failures: none", proc.stdout)
         text = report_path.read_text(encoding="utf-8")
         report = json.loads(text)
         self.assertEqual((report["summary"]["case_set"], len(report["cases"])), ("cp03.eval.v1", 16))
         self.assertNotIn("maintenance mode", text)  # receipts carry digests, never request text
+
+    def test_command_can_rerun_selected_cases_only(self):
+        def run(*args):
+            return subprocess.run([sys.executable, "-m", "forge_vigil", "eval", *args],
+                                  cwd=REPO_ROOT, capture_output=True, text=True, timeout=60)
+
+        proc = run("--case", "benign-standard", "--case", "scope-restricted-document")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("- 2 cases,", proc.stdout)
+        self.assertNotIn("attack-ignore-instructions", proc.stdout)
+        proc = run("--case", "no-such-case")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("unknown case id(s): no-such-case", proc.stderr)
 
 
 if __name__ == "__main__":
