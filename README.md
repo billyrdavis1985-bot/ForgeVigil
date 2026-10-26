@@ -11,8 +11,10 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   concurrent, crash and restart behaviour.
 - **Checkpoint 02:** a live Muse assessor using the Meta Model API. It investigates with bounded
   read-only tools. Code checks everything it cites (the false-positive check), and a hard spend cap is
-  reserved before every model call. It is built and tested against a local fake of the API and **has not
-  yet been run against the real API**.
+  reserved before every model call. It is tested against a local fake of the API. The **first live run**
+  (2026-10-26) confirmed that the key, endpoint, model, request format and usage reporting all work. One
+  of its two live assessments came back as an unparseable answer and was safely held for REVIEW. Version
+  0.2.1 adds answer diagnostics and a larger output allowance in response.
 
 Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
 evaluation), the model's own resistance to prompt injection, and readiness for hosting.
@@ -20,7 +22,7 @@ evaluation), the model's own resistance to prompt injection, and readiness for h
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 35 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 37 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
@@ -41,6 +43,7 @@ to start without these settings:
 | `FORGEVIGIL_SPEND_CAP_USD` | Required. Hard cap on the spend recorded in the database, for example `2.00`. |
 | `FORGEVIGIL_MUSE_MODEL` | Optional. Default `muse-spark-1.1`. |
 | `FORGEVIGIL_MUSE_BASE_URL` | Optional. Default `https://api.meta.ai/v1`. |
+| `FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS` | Optional. Default `2048`. Muse's reasoning counts as output, so a low value cuts answers off. |
 | `FORGEVIGIL_PRICE_INPUT_USD_PER_M`, `FORGEVIGIL_PRICE_OUTPUT_USD_PER_M` | Optional. Defaults `1.25` and `4.25` (reported launch prices; check your account). |
 
 Windows PowerShell, from the repo folder. The key is typed into a masked prompt, so it never appears in
@@ -75,7 +78,9 @@ At the end it prints the spend that was recorded.
    provider reports. When usage is unknown, the full reservation stays counted. One call can still exceed
    its estimate (for example through hidden reasoning tokens); any overrun is recorded at its actual cost.
 6. **Receipt:** it records the adapter and prompt version, every evidence-check result (quotes as hashes
-   only), the token counts and the cost.
+   only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
+   reasons, reply field names, and whether the answer was JSON, fenced JSON, empty, cut off or prose. The
+   model's text itself is never stored.
 
 **Transport rules:**
 - HTTPS only. Plain HTTP is allowed only for a loopback test server.

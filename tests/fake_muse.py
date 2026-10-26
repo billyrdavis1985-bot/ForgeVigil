@@ -12,11 +12,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-def completion(message: dict, prompt_tokens: int | None = 1000, completion_tokens: int = 100) -> dict:
+def completion(
+    message: dict, prompt_tokens: int | None = 1000, completion_tokens: int = 100, finish_reason: str = "stop"
+) -> dict:
     response = {
         "id": "chatcmpl-test",
         "object": "chat.completion",
-        "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
+        "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
     }
     if prompt_tokens is not None:
         response["usage"] = {

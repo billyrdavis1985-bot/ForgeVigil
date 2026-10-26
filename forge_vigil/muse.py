@@ -34,14 +34,19 @@ from .versions import ASSESSMENT_SCHEMA_VERSION, CODE_VERSION
 
 API_KEY_ENV_VAR = "MODEL_API_KEY"
 SPEND_CAP_ENV_VAR = "FORGEVIGIL_SPEND_CAP_USD"
+MAX_OUTPUT_TOKENS_ENV_VAR = "FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS"
 DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 DEFAULT_MODEL = "muse-spark-1.1"
 # Reported launch prices for muse-spark-1.1, USD per million tokens. Verify before relying on them.
 DEFAULT_INPUT_USD_PER_MILLION = "1.25"
 DEFAULT_OUTPUT_USD_PER_MILLION = "4.25"
-PROMPT_VERSION = "cp02.muse-assessor.v1"
+# The first live run used up to ~1,200 output tokens per assessment: reasoning counts as output.
+DEFAULT_MAX_OUTPUT_TOKENS = 2048
+PROMPT_VERSION = "cp02.muse-assessor.v2"
 MAX_TOOL_ARGUMENT_CHARS = 2048
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+_FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,39}")
+_FENCED_JSON = re.compile(r"```(?:json|JSON)?[ \t]*\r?\n(.*?)\r?\n[ \t]*```", re.DOTALL)
 
 REASON_CODES = (
     "NO_THREAT_INDICATORS",
@@ -73,6 +78,7 @@ Answer with JSON that matches the response schema:
   when the evidence is text in the request.
 - quotes: when you cite "request:message", copy the exact words (4 to 200 characters each) from the message.
 An approval reference that is missing from the registry is uncertainty, not proof of forgery.
+Reply with the JSON object only: no markdown fences and no other text.
 """
 
 ANSWER_SCHEMA = {
@@ -116,7 +122,7 @@ class MuseConfig:
     model: str = DEFAULT_MODEL
     base_url: str = DEFAULT_BASE_URL
     timeout_s: float = 30.0
-    max_output_tokens: int = 800
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     max_model_calls: int = 4
     max_tool_calls: int = 4
     max_response_bytes: int = 256 * 1024
@@ -143,7 +149,11 @@ class MuseConfig:
             raise ConfigError(f"{API_KEY_ENV_VAR} is not set; live mode needs an API key")
         if not env.get(SPEND_CAP_ENV_VAR):
             raise ConfigError(f"{SPEND_CAP_ENV_VAR} is not set; live mode needs an explicit spend cap in USD")
+        max_output = env.get(MAX_OUTPUT_TOKENS_ENV_VAR, str(DEFAULT_MAX_OUTPUT_TOKENS))
+        if not max_output.isascii() or not max_output.isdigit() or not 1 <= int(max_output) <= 32768:
+            raise ConfigError(f"{MAX_OUTPUT_TOKENS_ENV_VAR} must be a whole number from 1 to 32768")
         settings = {
+            "max_output_tokens": int(max_output),
             "api_key": env[API_KEY_ENV_VAR],
             "spend_cap_nanousd": parse_usd(env[SPEND_CAP_ENV_VAR], name=SPEND_CAP_ENV_VAR),
             "pricing": Pricing.from_strings(
@@ -213,13 +223,41 @@ def _transport_failure(exc: TransportError) -> str:
     return "MODEL_UNAVAILABLE"
 
 
+def _field_name(value: object) -> str:
+    return value if isinstance(value, str) and _FIELD_NAME.fullmatch(value) else "other"
+
+
 class _Meter:
+    """Usage plus shape-only diagnostics for one assessment. Never holds model or request text."""
+
     def __init__(self) -> None:
         self.calls = 0
         self.input_tokens = 0
         self.output_tokens = 0
         self.cost_nanousd = 0
         self.unknown = False
+        self.tool_calls = 0
+        self.finish_reasons: list[str] = []
+        self.message_fields: set[str] = set()
+        self.answer_shape: str | None = None
+        self.answer_chars: int | None = None
+
+    def observe(self, response: object, message: dict | None) -> None:
+        choices = response.get("choices") if isinstance(response, dict) else None
+        first = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+        self.finish_reasons.append(_field_name(first.get("finish_reason")))
+        if message is not None:
+            self.message_fields.update(_field_name(key) for key in list(message)[:12])
+
+    def diagnostics(self) -> dict:
+        return {
+            "model_calls": self.calls,
+            "tool_calls": self.tool_calls,
+            "finish_reasons": self.finish_reasons,
+            "message_fields": sorted(self.message_fields),
+            "answer_shape": self.answer_shape,
+            "answer_chars": self.answer_chars,
+        }
 
     def record(self, input_tokens: int, output_tokens: int, cost_nanousd: int) -> None:
         self.calls += 1
@@ -267,6 +305,23 @@ def _usage_tokens(response: object) -> tuple[int, int] | None:
     return None
 
 
+def _parse_answer(content: object) -> tuple[object, str]:
+    """Return (parsed JSON or None, shape). The shape names what came back, never its text."""
+    if content is None or (isinstance(content, str) and not content.strip()):
+        return None, "empty"
+    if not isinstance(content, str):
+        return None, "not_text"
+    text, shape = content.strip(), "json"
+    fenced = _FENCED_JSON.fullmatch(text)
+    if fenced:
+        text, shape = fenced.group(1), "fenced_json"
+    try:
+        parsed = json.loads(text)
+    except (ValueError, RecursionError):
+        return None, "invalid_json" if text.startswith("{") else "non_json_text"
+    return (parsed, shape) if isinstance(parsed, dict) else (None, "json_not_object")
+
+
 def _clean_tool_calls(calls: list) -> list[dict] | None:
     cleaned = []
     for call in calls:
@@ -302,27 +357,30 @@ class MuseAssessor:
             {"role": "user", "content": _request_as_data(item)},
         ]
         meter = _Meter()
-        tool_calls_used = 0
         for call_number in range(1, config.max_model_calls + 1):
             # Once tool calls or model calls run out, the model must answer.
-            tools_allowed = tool_calls_used < config.max_tool_calls and call_number < config.max_model_calls
+            tools_allowed = meter.tool_calls < config.max_tool_calls and call_number < config.max_model_calls
             result = self._call(item, self._body(messages, tools_allowed), meter)
             if isinstance(result, str):
-                return AssessorReply(None, meter.usage(), result)
+                return self._fail(meter, result)
             calls = result.get("tool_calls")
             if not calls:
                 return self._answer(result, meter)
-            if not tools_allowed or not isinstance(calls, list) or tool_calls_used + len(calls) > config.max_tool_calls:
-                return AssessorReply(None, meter.usage(), "TOOL_LIMIT_EXCEEDED")
+            if not tools_allowed or not isinstance(calls, list) or meter.tool_calls + len(calls) > config.max_tool_calls:
+                return self._fail(meter, "TOOL_LIMIT_EXCEEDED")
             cleaned = _clean_tool_calls(calls)
             if cleaned is None:
-                return AssessorReply(None, meter.usage(), "MODEL_RESPONSE_MALFORMED")
+                return self._fail(meter, "MODEL_RESPONSE_MALFORMED")
             messages.append({"role": "assistant", "content": None, "tool_calls": cleaned})
             for call in cleaned:
                 answer = tools.run(call["function"]["name"], call["function"]["arguments"])
                 messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(answer)})
-            tool_calls_used += len(cleaned)
-        return AssessorReply(None, meter.usage(), "MODEL_CALL_LIMIT_REACHED")
+            meter.tool_calls += len(cleaned)
+        return self._fail(meter, "MODEL_CALL_LIMIT_REACHED")
+
+    @staticmethod
+    def _fail(meter: _Meter, code: str) -> AssessorReply:
+        return AssessorReply(None, meter.usage(), code, meter.diagnostics())
 
     def _body(self, messages: list[dict], tools_allowed: bool) -> bytes:
         payload = {
@@ -383,20 +441,21 @@ class MuseAssessor:
             )
             meter.record(tokens[0], tokens[1], cost)
         message = _first_message(response)
+        meter.observe(response, message)
         return message if message is not None else "MODEL_RESPONSE_MALFORMED"
 
     def _answer(self, message: dict, meter: _Meter) -> AssessorReply:
         content = message.get("content")
-        try:
-            parsed = json.loads(content) if isinstance(content, str) else None
-        except (ValueError, RecursionError):
-            parsed = None
-        if not isinstance(parsed, dict):
-            return AssessorReply(None, meter.usage(), "MODEL_OUTPUT_NOT_JSON")
+        parsed, meter.answer_shape = _parse_answer(content)
+        meter.answer_chars = len(content) if isinstance(content, str) else 0
+        if parsed is None:
+            if meter.finish_reasons and meter.finish_reasons[-1] == "length":
+                return self._fail(meter, "MODEL_OUTPUT_TRUNCATED")  # hit max_output_tokens mid-answer
+            return self._fail(meter, "MODEL_OUTPUT_EMPTY" if meter.answer_shape == "empty" else "MODEL_OUTPUT_NOT_JSON")
         if set(parsed) != _ANSWER_KEYS or parsed["reason_code"] not in REASON_CODES:
-            return AssessorReply(None, meter.usage(), "MODEL_OUTPUT_INVALID")
+            return self._fail(meter, "MODEL_OUTPUT_INVALID")
         if (parsed["threat_finding"] == "none") != (parsed["reason_code"] == "NO_THREAT_INDICATORS"):
-            return AssessorReply(None, meter.usage(), "MODEL_OUTPUT_INCONSISTENT")
+            return self._fail(meter, "MODEL_OUTPUT_INCONSISTENT")
         # Schema and status are set here, never taken from the model.
         output = {
             "schema": ASSESSMENT_SCHEMA_VERSION,
@@ -406,4 +465,4 @@ class MuseAssessor:
             "evidence_refs": parsed["evidence_refs"],
             "quotes": parsed["quotes"],
         }
-        return AssessorReply(output, meter.usage())
+        return AssessorReply(output, meter.usage(), diagnostics=meter.diagnostics())

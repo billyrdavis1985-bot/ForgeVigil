@@ -241,6 +241,7 @@ class DecisionTests(_TempStateTest):
                     "quotes": [],
                 },
                 "validation_error": None,
+                "diagnostics": None,
             },
         )
         self.assertEqual(receipt["fallback_state"], "none")

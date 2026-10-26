@@ -10,6 +10,7 @@ ALLOW decision is paired with an outbox item built from server-owned bytes.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import uuid
 from dataclasses import dataclass
@@ -46,6 +47,22 @@ IN_PROGRESS = "in_progress"  # an earlier attempt has not completed; no result y
 UNAVAILABLE = "unavailable"  # state could not be recorded; nothing was delivered
 
 _FAILURE_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,47}")
+MAX_DIAGNOSTICS_BYTES = 2048
+
+
+def _bounded_diagnostics(value: object) -> dict | None:
+    """Keep an assessor's diagnostics only if they are small, plain JSON data."""
+    if value is None:
+        return None
+    try:
+        encoded = json.dumps(value, sort_keys=True)
+    except (TypeError, ValueError):
+        return {"dropped": "not_serializable"}
+    if not isinstance(value, dict):
+        return {"dropped": "not_an_object"}
+    if len(encoded) > MAX_DIAGNOSTICS_BYTES:
+        return {"dropped": "too_large"}
+    return json.loads(encoded)
 
 
 @dataclass(frozen=True)
@@ -198,12 +215,13 @@ class ForgeVigilService:
                 Usage.unknown("assessor_reply_malformed_usage_unknown"),
                 "assessment_invalid",
             )
+        diagnostics = _bounded_diagnostics(reply.diagnostics)
         if reply.failure is not None:
             code = reply.failure if isinstance(reply.failure, str) and _FAILURE_CODE.fullmatch(reply.failure) else "FAILED"
             return _AssessmentRun(
                 None,
                 f"ASSESSMENT_{code}",
-                self._assessment_record("failed", "unknown"),
+                self._assessment_record("failed", "unknown", diagnostics=diagnostics),
                 reply.usage,
                 f"assessor_failure:{code.lower()}",
             )
@@ -213,7 +231,7 @@ class ForgeVigilService:
             return _AssessmentRun(
                 None,
                 "ASSESSMENT_INVALID",
-                self._assessment_record("invalid", "unknown", validation_error=exc.code),
+                self._assessment_record("invalid", "unknown", validation_error=exc.code, diagnostics=diagnostics),
                 reply.usage,
                 "assessment_invalid",
             )
@@ -235,6 +253,7 @@ class ForgeVigilService:
                 reason_code=assessment.reason_code,
                 evidence_refs=assessment.evidence_refs,
                 evidence_check=check.to_record(),
+                diagnostics=diagnostics,
             ),
             reply.usage,
             "none",
@@ -251,6 +270,7 @@ class ForgeVigilService:
         evidence_check: dict | None = None,
         validation_error: str | None = None,
         adapter_id: str | None = None,
+        diagnostics: dict | None = None,
     ) -> dict:
         return {
             "adapter_id": adapter_id or self.adapter_id,
@@ -260,6 +280,7 @@ class ForgeVigilService:
             "evidence_refs": list(evidence_refs),
             "evidence_check": evidence_check,
             "validation_error": validation_error,
+            "diagnostics": diagnostics,
         }
 
     def _outbox_item(self, claim: Claim) -> OutboxItem:

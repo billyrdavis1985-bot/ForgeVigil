@@ -70,7 +70,7 @@ class LiveAssessorTests(_MuseTest):
         self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("ALLOW", "ALL_CHECKS_PASSED"))
         self.assertEqual(service.assessor_mode, "live")  # what GET /health reports
         self.assertEqual(receipt["assessment"]["adapter_id"], "muse.muse-spark-1.1")
-        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v1")
+        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v2")
         # 1000 x $1.25/M + 100 x $4.25/M = $0.001675
         self.assertEqual(
             receipt["usage"],
@@ -91,6 +91,14 @@ class LiveAssessorTests(_MuseTest):
             {"lookup_approval", "get_document_facts", "get_recipient_facts"},
         )
         self.assertEqual(body["response_format"]["type"], "json_schema")
+        self.assertEqual(body["max_tokens"], 2048)
+        diagnostics = receipt["assessment"]["diagnostics"]
+        self.assertEqual(
+            {key: diagnostics[key] for key in ("model_calls", "tool_calls", "finish_reasons", "message_fields", "answer_shape")},
+            {"model_calls": 1, "tool_calls": 0, "finish_reasons": ["stop"],
+             "message_fields": ["content", "role"], "answer_shape": "json"},
+        )
+        self.assertGreater(diagnostics["answer_chars"], 0)
         # The request text travels as JSON-encoded data in the user turn, never as instructions.
         self.assertEqual(body["messages"][0]["role"], "system")
         self.assertIn(json.dumps(valid_payload()["message"]), body["messages"][1]["content"])
@@ -185,6 +193,53 @@ class LiveAssessorTests(_MuseTest):
         granted = self.submit(service, request_id="req-r3")
         self.assertEqual((granted["disposition"], granted["reason_code"]), ("REVIEW", "ASSESSMENT_MODEL_OUTPUT_INVALID"))
         self.assertEqual(service.store.table_counts()["outbox"], 0)
+
+    def test_unusable_answers_get_specific_codes_and_shape_only_diagnostics(self):
+        message = valid_payload()["message"]
+        plain = ["content", "role"]
+        cases = {
+            "cut off at the token limit": (
+                fake.completion({"role": "assistant", "content": '{"threat_finding": "no'}, finish_reason="length"),
+                "ASSESSMENT_MODEL_OUTPUT_TRUNCATED", "invalid_json", "length", plain,
+            ),
+            "empty, reasoning only": (
+                fake.completion({"role": "assistant", "content": None, "reasoning_content": "thinking about it"}),
+                "ASSESSMENT_MODEL_OUTPUT_EMPTY", "empty", "stop", ["content", "reasoning_content", "role"],
+            ),
+            "prose echoing the request": (
+                fake.completion({"role": "assistant", "content": "This request says: " + message}),
+                "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "non_json_text", "stop", plain,
+            ),
+            "JSON that is not an object": (
+                fake.completion({"role": "assistant", "content": "[1, 2]"}),
+                "ASSESSMENT_MODEL_OUTPUT_NOT_JSON", "json_not_object", "stop", plain,
+            ),
+        }
+        for index, (name, (reply, reason, shape, finish, fields)) in enumerate(cases.items()):
+            with self.subTest(name):
+                self.api.script(reply)
+                db_name = f"answer-{index}.sqlite3"
+                service = self.service(db_name=db_name)
+                receipt = self.submit(service)
+                self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("REVIEW", reason))
+                diagnostics = receipt["assessment"]["diagnostics"]
+                self.assertEqual(
+                    (diagnostics["answer_shape"], diagnostics["finish_reasons"], diagnostics["message_fields"]),
+                    (shape, [finish], fields),
+                )
+                self.assertEqual(receipt["usage"]["status"], "metered")
+                self.assertEqual(service.store.table_counts()["outbox"], 0)
+                # Diagnostics describe the reply's shape; its text is never kept.
+                self.assertNotIn("This request says", json.dumps(receipt))
+                self.assertNotIn(message, dump_all_rows(self.tmp / db_name))
+
+    def test_answer_in_a_markdown_fence_is_accepted(self):
+        content = json.loads(fake.answer()["choices"][0]["message"]["content"])
+        fenced = "```json\n" + json.dumps(content) + "\n```"
+        self.api.script(fake.completion({"role": "assistant", "content": fenced}))
+        receipt = self.submit(self.service())
+        self.assertEqual(receipt["disposition"], "ALLOW")
+        self.assertEqual(receipt["assessment"]["diagnostics"]["answer_shape"], "fenced_json")
 
     def test_tool_use_is_bounded(self):
         # Unknown tools and malformed arguments get error results, not crashes.
@@ -328,6 +383,8 @@ class LiveSetupTests(_MuseTest):
     def test_live_mode_refuses_unsafe_configuration(self):
         base = {"MODEL_API_KEY": TEST_KEY, "FORGEVIGIL_SPEND_CAP_USD": "2.00"}
         self.assertEqual(MuseConfig.from_env(base).spend_cap_nanousd, 2_000_000_000)
+        self.assertEqual(MuseConfig.from_env(base).max_output_tokens, 2048)
+        self.assertEqual(MuseConfig.from_env({**base, "FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS": "4096"}).max_output_tokens, 4096)
         self.assertNotIn(TEST_KEY, repr(MuseConfig.from_env(base)))
         bad = {
             "no key": {"FORGEVIGIL_SPEND_CAP_USD": "2.00"},
@@ -338,6 +395,9 @@ class LiveSetupTests(_MuseTest):
             "plain http": {**base, "FORGEVIGIL_MUSE_BASE_URL": "http://api.example.com/v1"},
             "credentials in url": {**base, "FORGEVIGIL_MUSE_BASE_URL": "https://user:pw@api.example.com/v1"},
             "path-like model id": {**base, "FORGEVIGIL_MUSE_MODEL": "../muse"},
+            "unparseable output cap": {**base, "FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS": "lots"},
+            "zero output cap": {**base, "FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS": "0"},
+            "huge output cap": {**base, "FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS": "99999"},
         }
         for name, env in bad.items():
             with self.subTest(name):

@@ -93,6 +93,9 @@ class AssessorReply:
     # Set when the assessor could not assess for an expected reason (budget,
     # model unavailable, tool limit). Usage still reports what was spent.
     failure: str | None = None
+    # Shape-only facts about the model exchange (counts, finish reasons, field
+    # names). Never raw model or request text.
+    diagnostics: dict | None = None
 
 
 class Assessor(Protocol):
