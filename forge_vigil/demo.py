@@ -19,6 +19,7 @@ from typing import TextIO
 from .assessment import fixed_clean_assessor, format_usd
 from .fixtures import OPERATOR_ACTOR_ID, PUBLIC_SPEC_CONTENT, default_fixtures
 from .http_api import ForgeVigilHTTPServer
+from .report import build_report, format_report
 from .service import ForgeVigilService
 from .store import Store
 
@@ -86,7 +87,8 @@ def _case_ok(expected: str, receipt: dict, live: bool) -> bool:
 def run_demo(out: TextIO = sys.stdout, live_config=None, with_review: bool = False) -> int:
     """Fixture mode checks exact dispositions. With a `muse.MuseConfig`, the
     cases go to the live model and only the safety invariants are checked.
-    `with_review` finishes with the operator releasing the REVIEW case."""
+    `with_review` finishes with the operator releasing the REVIEW case and
+    replaying it. Every run ends with the operator report for its state."""
     live = live_config is not None
     failures = 0
     with tempfile.TemporaryDirectory(prefix="forgevigil-demo-") as tmp:
@@ -145,6 +147,12 @@ def run_demo(out: TextIO = sys.stdout, live_config=None, with_review: bool = Fal
                     print(f"\n[operator release of REVIEW case] released by {review['reviewer']}, "
                           f"scope re-check {review['scope_recheck']}, effect_id={review['effect_id']}", file=out)
                     print(json.dumps(review, indent=2, sort_keys=True), file=out)
+                    status, body = _post(server.server_port, token, CASES[2][1])
+                    decision = (body.get("review") or {}).get("decision")
+                    replay_ok = (status, body.get("delivered"), decision) == (200, True, "release")
+                    failures += not replay_ok
+                    print(f"\n[replay of REVIEW case] HTTP {status} delivered={body.get('delivered')} review={decision}"
+                          f"{'' if replay_ok else '  <-- UNEXPECTED'}", file=out)
 
             items = store.outbox_items()
             exact = sorted(item.request_id for item in items) == sorted(delivered_requests) and all(
@@ -155,6 +163,7 @@ def run_demo(out: TextIO = sys.stdout, live_config=None, with_review: bool = Fal
             if live:
                 spent = format_usd(store.committed_spend_nanousd())
                 print(f"live spend recorded: {spent} USD (calls with unknown usage count their full reservation)", file=out)
+            print("\n" + format_report(build_report(store)), file=out)
         finally:
             server.shutdown()
             server.server_close()

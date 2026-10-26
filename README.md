@@ -25,6 +25,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 04:** operator review, the human side of the system. `review release` delivers a held
   REVIEW case after re-running the scope checks; BLOCK cases can only be confirmed or marked as false
   positives. Every decision gets its own receipt. Review is a local command only, never over HTTP.
+- **Checkpoint 05:** closing the loop. Replaying a request now shows any operator decision on it, so
+  a requester learns that a held request was later released. A read-only `report` command summarises a
+  database: outcomes, deliveries, pending reviews, false-positive marks, model failures and spend.
 
 Not established yet: Muse's real detection quality and false-positive rate (this needs a labelled
 evaluation), the model's own resistance to prompt injection, and readiness for hosting.
@@ -32,10 +35,11 @@ evaluation), the model's own resistance to prompt injection, and readiness for h
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 56 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 62 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
+python3 -m forge_vigil report                    # summary of var/forgevigil.sqlite3 (read-only)
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -160,6 +164,28 @@ The rules behind it:
 - **Original receipts never change:** the decision is an append-only review record linked to the original receipt. It names the reviewer, the decision, the re-check result and the delivery ID.
 - **Local only:** review is never exposed over HTTP, so a requester can't release its own held request, and the model has no tool for it.
 
+## Report (Checkpoint 05)
+
+```powershell
+.\.venv\Scripts\python.exe -m forge_vigil report
+.\.venv\Scripts\python.exe -m forge_vigil report --db var\other.sqlite3 --json report.json
+```
+
+One screen covering everything in the database:
+- requests by disposition;
+- deliveries, split into allowed and released by the operator;
+- pending reviews and decisions;
+- model threat flags, holds where the evidence didn't check out, and BLOCKs marked false positive;
+- model failures by cause;
+- recorded spend, settled, unknown-usage and in-flight calls, and tokens;
+- the most common reasons.
+
+The report shows counts and codes only. Request text is never stored, so it cannot appear.
+
+All figures come from one read transaction, so they agree with each other even while `serve` is writing.
+The database is opened read-only, so SQLite itself refuses any write. A database on an older schema is
+refused rather than upgraded. Run `review list` (or `serve`) once to upgrade it.
+
 ## API
 
 `POST /v1/requests` with `Authorization: Bearer <token>` and `Content-Type: application/json`:
@@ -180,11 +206,17 @@ The rules behind it:
 | BLOCK: the assessment reports a threat and code confirmed its evidence | 403 | none |
 | DENY: actor, document or recipient out of scope (no intent is inferred) | 403 | none |
 | REVIEW: approval missing or unverified, threat evidence unconfirmed, assessment invalid or failed, budget exhausted, or work interrupted | 202 | none |
-| Same `request_id` and same payload | original status, `"outcome": "replayed"` | none (recorded receipt returned) |
+| Same `request_id` and same payload | original status, `"outcome": "replayed"`; 200 if the operator has since released it | none new (recorded receipt returned) |
 | Same `request_id` with a different payload | 409 `request_id_conflict` | none |
 | Earlier attempt still in progress | 409 `request_in_progress` | none |
 | Intent or receipt could not be recorded | 503 `audit_unavailable` | none |
 | Bad schema / no auth / no length / too large / wrong type | 400 / 401 / 411 / 413 / 415 | none |
+
+Decided and replayed responses carry `outcome`, `disposition`, `delivered`, the original `receipt` and
+`review`. `review` is `null` until the operator decides, then holds `review_id`, `decision`, `decided_at`,
+`delivered` and `effect_id`. The reviewer's name is not included. After a `release`, `delivered` is `true`
+even though the original receipt still says `false`: the receipt records what was decided at the time,
+and the review records what happened later.
 
 `GET /health` returns `{"status": "ok", "mode": "fixture"}`, or `"mode": "live"` when the Muse assessor is in use.
 
@@ -212,12 +244,13 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/evidence.py` | the false-positive check: confirms quotes and cited facts |
 | `forge_vigil/budget.py` | pricing and worst-case cost arithmetic (integer nano-USD) |
 | `forge_vigil/policy.py` | deterministic permission (the only code that can produce ALLOW), policy digest |
-| `forge_vigil/store.py` | SQLite intents, receipts, outbox and spend ledger; append-only triggers |
+| `forge_vigil/store.py` | SQLite intents, receipts, outbox, spend ledger and reviews; append-only triggers; read-only mode |
 | `forge_vigil/service.py` | idempotent orchestration, atomic completion, restart recovery |
 | `forge_vigil/http_api.py` | localhost HTTP adapter, bearer authentication, transport limits |
 | `forge_vigil/demo.py` | the smoke demo, with fixture and live modes |
 | `forge_vigil/evaluation.py`, `eval_cases.json` | the labelled evaluation and its 16 fictional cases |
 | `forge_vigil/review.py` | operator review: release, reject, confirm or mark false positives on held cases |
+| `forge_vigil/report.py` | the read-only operator report |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).

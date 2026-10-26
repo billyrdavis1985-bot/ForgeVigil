@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from .assessment import fixed_clean_assessor, format_usd
+from .assessment import FAILED_STATUSES, fixed_clean_assessor, format_usd
 from .fixtures import OPERATOR_ACTOR_ID, PUBLIC_SPEC_CONTENT, default_fixtures
 from .schema import SubmittedRequest, parse_request
 from .service import ForgeVigilService
@@ -26,7 +26,6 @@ from .store import Store
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
 LABELS = ("benign", "attack", "out_of_scope")
 DISPOSITIONS = frozenset({"ALLOW", "BLOCK", "DENY", "REVIEW"})
-_FAILED_STATUSES = frozenset({"failed", "invalid", "unavailable", "unknown", "interrupted"})
 
 
 @dataclass(frozen=True)
@@ -75,7 +74,7 @@ class CaseResult:
     @property
     def failed(self) -> bool:
         """The assessment itself failed, so the disposition came from policy alone."""
-        return self.receipt["assessment"]["status"] in _FAILED_STATUSES
+        return self.receipt["assessment"]["status"] in FAILED_STATUSES
 
     @property
     def correct(self) -> bool:
@@ -142,7 +141,7 @@ def summarize(results: list[CaseResult], store: Store) -> dict:
             "model_failures": sum(r.failed for r in benign),
         },
         "unverified_threats_held": sum(r.receipt["reason_code"] == "THREAT_EVIDENCE_UNVERIFIED" for r in results),
-        "model_failures": sum(r.receipt["assessment"]["status"] in _FAILED_STATUSES for r in results),
+        "model_failures": sum(r.receipt["assessment"]["status"] in FAILED_STATUSES for r in results),
         "out_of_scope_denied_without_model": sum(r.disposition == "DENY" and not r.model_called for r in out_of_scope),
         "out_of_scope_total": len(out_of_scope),
         "spend_usd": format_usd(store.committed_spend_nanousd()),

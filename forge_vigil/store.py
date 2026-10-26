@@ -158,6 +158,7 @@ class ExistingRequest:
     state: str
     input_digest: str
     receipt: dict | None
+    review: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -173,6 +174,15 @@ class OutboxItem:
     created_at: str
 
 
+@dataclass(frozen=True)
+class Snapshot:
+    receipts: list[dict]
+    reviews: list[dict]
+    delivery_keys: list[tuple[str, str]]  # (actor_id, request_id) per outbox item
+    spend_entries: list[dict]
+    committed_spend_nanousd: int
+
+
 _OUTBOX_COLUMNS = (
     "effect_id, actor_id, request_id, document_id, recipient_id, recipient_address, body, body_sha256, created_at"
 )
@@ -182,13 +192,24 @@ _CLAIM_COLUMNS = (
 
 
 class Store:
-    def __init__(self, path: str | Path, observer: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self, path: str | Path, observer: Callable[[str], None] | None = None, *, read_only: bool = False
+    ) -> None:
+        """`read_only` opens an existing current-schema database that SQLite itself will refuse to write."""
         self.path = Path(path)
         self._observer = observer
-        self._initialize()
+        self._read_only = read_only
+        if read_only:
+            self._check_current_schema()
+        else:
+            self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=5.0, isolation_level=None)
+        if self._read_only:
+            uri = self.path.resolve().as_uri() + "?mode=ro"
+            conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None)
+        else:
+            conn = sqlite3.connect(self.path, timeout=5.0, isolation_level=None)
         try:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA synchronous = FULL")
@@ -243,6 +264,16 @@ class Store:
                 "INSERT OR REPLACE INTO meta (key, value) VALUES ('store_schema', ?)", (STORE_SCHEMA_VERSION,)
             )
 
+    def _check_current_schema(self) -> None:
+        # A read-only store never migrates, so an older or unknown schema is refused.
+        with self._reader() as conn:
+            row = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
+        version = row[0] if row else None
+        if version != STORE_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"store schema is {version!r}, not {STORE_SCHEMA_VERSION!r}; run serve or review once to upgrade it"
+            )
+
     def claim(
         self,
         *,
@@ -266,8 +297,15 @@ class Store:
                     "SELECT receipt_json FROM receipts WHERE actor_id = ? AND request_id = ?",
                     (actor_id, request_id),
                 ).fetchone()
+                review = conn.execute(
+                    "SELECT review_json FROM reviews WHERE actor_id = ? AND request_id = ?",
+                    (actor_id, request_id),
+                ).fetchone()
                 return ExistingRequest(
-                    state=row[0], input_digest=row[1], receipt=json.loads(receipt[0]) if receipt else None
+                    state=row[0],
+                    input_digest=row[1],
+                    receipt=json.loads(receipt[0]) if receipt else None,
+                    review=json.loads(review[0]) if review else None,
                 )
             claim = Claim(
                 actor_id=actor_id,
@@ -404,6 +442,29 @@ class Store:
                 ),
             )
         self._notify("review_committed")
+
+    def snapshot(self) -> Snapshot:
+        """Everything the operator report needs, read in ONE transaction so the parts agree
+        even while serve keeps writing. Outbox bodies are not read."""
+        with self._reader() as conn:
+            conn.execute("BEGIN")
+            try:
+                receipts = conn.execute("SELECT receipt_json FROM receipts ORDER BY created_at, receipt_id").fetchall()
+                reviews = conn.execute("SELECT review_json FROM reviews ORDER BY created_at, review_id").fetchall()
+                deliveries = conn.execute("SELECT actor_id, request_id FROM outbox ORDER BY created_at").fetchall()
+                cursor = conn.cursor()
+                cursor.row_factory = sqlite3.Row
+                spend = cursor.execute("SELECT * FROM spend_ledger ORDER BY created_at, reservation_id").fetchall()
+                committed = _committed_spend(conn)
+            finally:
+                conn.execute("ROLLBACK")
+        return Snapshot(
+            receipts=[json.loads(row[0]) for row in receipts],
+            reviews=[json.loads(row[0]) for row in reviews],
+            delivery_keys=[(row[0], row[1]) for row in deliveries],
+            spend_entries=[dict(row) for row in spend],
+            committed_spend_nanousd=committed,
+        )
 
     def review_queue(self) -> list[tuple[dict, dict | None]]:
         """REVIEW and BLOCK receipts, oldest first, each paired with its decision if one exists."""

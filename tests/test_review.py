@@ -167,6 +167,43 @@ class ReviewTests(unittest.TestCase):
         self.assertNotIn("review_committed", events)  # ...and rolled back with the failed decision
         self.assertEqual(self.outbox(), [])
 
+    def test_replay_reports_the_operator_decision(self):
+        harness = Harness(self.db_path)
+        self.addCleanup(harness.stop)
+        held = valid_payload(request_id="req-held", approval_ref=None)
+        status, first, _ = harness.post(held)
+        self.assertEqual((status, first["delivered"], first["review"]), (202, False, None))
+        status, pending, _ = harness.post(held)
+        self.assertEqual((status, pending["outcome"], pending["review"]), (202, "replayed", None))
+
+        review = self.decide("req-held", "release")
+        status, replay, _ = harness.post(held)
+        self.assertEqual(
+            (status, replay["outcome"], replay["disposition"], replay["delivered"]), (200, "replayed", "REVIEW", True)
+        )
+        self.assertEqual(replay["receipt"], first["receipt"])  # the original receipt still says what was decided then
+        self.assertEqual(replay["review"], {key: review[key] for key in
+                                            ("review_id", "decision", "decided_at", "delivered", "effect_id")})
+        (item,) = harness.store.outbox_items()
+        self.assertEqual(replay["review"]["effect_id"], item.effect_id)
+        self.assertNotIn("billy", json.dumps(replay))  # the reviewer's name stays internal
+
+        rejected = valid_payload(request_id="req-rejected", approval_ref=None)
+        harness.post(rejected)
+        self.decide("req-rejected", "reject")
+        status, replay, _ = harness.post(rejected)
+        self.assertEqual((status, replay["delivered"], replay["review"]["decision"]), (202, False, "reject"))
+
+        self.record(FixedAssessor(THREAT, adapter_id="fixture.injected-threat.test"), request_id="req-blocked")
+        self.decide("req-blocked", "false_positive")
+        status, replay, _ = harness.post(valid_payload(request_id="req-blocked"))
+        self.assertEqual(
+            (status, replay["disposition"], replay["delivered"], replay["review"]["decision"]),
+            (403, "BLOCK", False, "false_positive"),
+        )
+        self.assertEqual(len(harness.store.outbox_items()), 1)  # replays deliver nothing new
+        self.assertEqual(harness.assessor.calls, 2)  # and never reach the assessor
+
     def test_review_is_not_reachable_over_http(self):
         harness = Harness(self.db_path)
         self.addCleanup(harness.stop)
@@ -218,6 +255,8 @@ class ReviewTests(unittest.TestCase):
         text = out.getvalue()
         self.assertIn("released by demo-operator, scope re-check passed", text)
         self.assertIn("outbox items: 2 (expected 2; only approved public-spec bytes: True)", text)
+        self.assertIn("[replay of REVIEW case] HTTP 200 delivered=True review=release", text)
+        self.assertIn("Deliveries:  2 (1 allowed, 1 released by the operator)", text)
 
 
 if __name__ == "__main__":

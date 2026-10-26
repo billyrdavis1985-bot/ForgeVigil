@@ -18,6 +18,8 @@ from typing import Mapping, Protocol
 from .versions import ASSESSMENT_SCHEMA_VERSION
 
 THREAT_FINDINGS = frozenset({"none", "threat"})
+# Receipt assessment statuses meaning the model gave no usable answer.
+FAILED_STATUSES = frozenset({"failed", "invalid", "unavailable", "unknown", "interrupted"})
 MAX_EVIDENCE_REFS = 16
 MAX_QUOTES = 5
 MAX_QUOTE_CHARS = 200

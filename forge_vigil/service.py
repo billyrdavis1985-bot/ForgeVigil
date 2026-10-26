@@ -69,6 +69,7 @@ def _bounded_diagnostics(value: object) -> dict | None:
 class Outcome:
     kind: str
     receipt: dict | None = None
+    review: dict | None = None  # a later operator decision on this request, if any
 
 
 @dataclass(frozen=True)
@@ -157,7 +158,7 @@ class ForgeVigilService:
         if existing.input_digest != digest:
             return Outcome(CONFLICT)
         if existing.state == "completed" and existing.receipt is not None:
-            return Outcome(REPLAYED, existing.receipt)
+            return Outcome(REPLAYED, existing.receipt, existing.review)
         return Outcome(IN_PROGRESS)
 
     def _process(self, claim: Claim, request: SubmittedRequest) -> Outcome:

@@ -84,16 +84,26 @@ class ForgeVigilHTTPServer(ThreadingHTTPServer):
         return actor_id
 
 
+def _review_summary(review: dict | None) -> dict | None:
+    """What a requester may see of an operator decision. The reviewer's name stays internal."""
+    if review is None:
+        return None
+    return {key: review[key] for key in ("review_id", "decision", "decided_at", "delivered", "effect_id")}
+
+
 def render_outcome(outcome: Outcome) -> tuple[int, dict, dict]:
     if outcome.kind in (DECIDED, REPLAYED):
-        receipt = outcome.receipt
+        receipt, review = outcome.receipt, outcome.review
+        released = review is not None and review["delivered"]
         payload = {
             "outcome": outcome.kind,
             "disposition": receipt["disposition"],
-            "delivered": receipt["delivered"],
+            "delivered": receipt["delivered"] or released,
             "receipt": receipt,
+            "review": _review_summary(review),
         }
-        return DISPOSITION_STATUS[receipt["disposition"]], payload, {}
+        # A held request an operator later released has been delivered, so it answers 200.
+        return 200 if released else DISPOSITION_STATUS[receipt["disposition"]], payload, {}
     if outcome.kind == CONFLICT:
         detail = "request_id was already used with a different payload; nothing new was assessed or delivered"
         return 409, {"error": "request_id_conflict", "detail": detail}, {}

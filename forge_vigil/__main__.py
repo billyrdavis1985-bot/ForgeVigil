@@ -1,6 +1,6 @@
-"""Command line: `python3 -m forge_vigil serve`, `demo` or `eval`.
+"""Command line: `python3 -m forge_vigil serve`, `demo`, `eval`, `review` or `report`.
 
-All default to the fixture assessor. `--assessor muse` uses the live Meta
+serve, demo and eval default to the fixture assessor. `--assessor muse` uses the live Meta
 Model API and needs MODEL_API_KEY and FORGEVIGIL_SPEND_CAP_USD in the environment.
 """
 
@@ -23,6 +23,9 @@ def main(argv: list[str] | None = None) -> int:
     demo = commands.add_parser("demo", help="three-case smoke demonstration on temporary state")
     demo.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     demo.add_argument("--review", action="store_true", help="finish by releasing the REVIEW case as the operator")
+    report = commands.add_parser("report", help="summary of a database: outcomes, reviews, failures, spend")
+    report.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
+    report.add_argument("--json", type=Path, help="also write the report as JSON to this file")
     review = commands.add_parser("review", help="operator decisions on REVIEW and BLOCK cases (local only)")
     actions = review.add_subparsers(dest="action", required=True)
     common = argparse.ArgumentParser(add_help=False)
@@ -52,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         return _eval(args.assessor, args.json, args.cases)
     if args.command == "review":
         return _review(args)
+    if args.command == "report":
+        return _report(args.db, args.json)
     return _serve(args.db, args.port, args.assessor)
 
 
@@ -74,6 +79,28 @@ def _demo(assessor: str, with_review: bool) -> int:
         return run_demo(with_review=with_review)
     config = _live_config()
     return 2 if config is None else run_demo(live_config=config, with_review=with_review)
+
+
+def _report(db_path: Path, json_path: Path | None) -> int:
+    import json
+    import sqlite3
+
+    from .report import build_report, format_report
+    from .store import Store
+
+    if not db_path.is_file():
+        print(f"refusing to run: no database at {db_path}", file=sys.stderr)
+        return 2
+    try:
+        report = build_report(Store(db_path, read_only=True))
+    except (RuntimeError, sqlite3.Error) as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    print(format_report(report))
+    if json_path is not None:
+        json_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        print(f"\nreport written to {json_path}")
+    return 0
 
 
 def _review(args) -> int:
