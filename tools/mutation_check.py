@@ -312,6 +312,20 @@ MUTANTS: tuple[Mutant, ...] = (
              'os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0), 0o644)'),
             ('        os.chmod(path, 0o600)  # an existing journal is tightened too\n', '')),
            'tests.test_client.RealTrafficTests.test_submit_records_the_request_and_keeps_the_requesters_copy', posix_only=True),
+    # Checkpoint 12: the handshake report.
+    Mutant('handshake prints the environment', 'tools/handshake.py',
+           (("(not compared)\",\n    ]", "(not compared)\",\n        str(dict(os.environ)),\n    ]"),),
+           'tests.test_handshake.HandshakeTests.test_it_writes_nothing_and_prints_no_environment_value'),
+    Mutant('handshake writes bytecode', 'tools/handshake.py',
+           (('sys.dont_write_bytecode = True  # set before', 'pass  # set before'),),
+           'tests.test_handshake.HandshakeTests.test_it_writes_nothing_and_prints_no_environment_value'),
+    Mutant('handshake reports a stale test count', 'tools/handshake.py',
+           (('    return suite.countTestCases(), len(loader.errors)', '    return 104, len(loader.errors)'),),
+           'tests.test_handshake.HandshakeTests.test_the_report_says_what_the_repository_contains'),
+    Mutant('handshake hides uncommitted changes', 'tools/handshake.py',
+           (('        changed = len([line for line in run("status", "--porcelain", "--untracked-files=all").splitlines() if line])',
+             '        changed = 0'),),
+           'tests.test_handshake.HandshakeTests.test_git_facts_report_the_tree_and_uncommitted_changes'),
 )
 
 

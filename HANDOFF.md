@@ -5,7 +5,7 @@
 - **How changes ship:** the cloud session cannot push (403), so each change is delivered as a patch plus guarded PowerShell cells.
   - Apply cells check the patch's SHA-256 and the repository's content tree hash before changing anything.
   - Commit cells re-run the test suite and refuse unless it passes.
-- **When:** 2026-10-26 (Checkpoints 02 to 07) and 2026-10-27 (0.7.1 to Checkpoint 11), America/New_York.
+- **When:** 2026-10-26 (Checkpoints 02 to 07) and 2026-10-27 (0.7.1 to Checkpoint 12), America/New_York.
 
 ## History on `main`
 | Commit | Version | What |
@@ -28,9 +28,10 @@
 | `cc13bfb` | 0.9.0 | Checkpoint 09: `review show`; `review list --pending` |
 | `8febbf4` | 0.10.0 | Checkpoint 10: keyed request fingerprints; `tools/mutation_check.py`; HANDOFF consolidated |
 | `3cb4587` | 0.10.0 | HANDOFF: Checkpoint 10 Windows results (run 19) |
-| this commit | 0.11.0 | Checkpoint 11: `submit` with the requester's journal; `review export --all` and `--from-journal` |
+| `8b2ac9c` | 0.11.0 | Checkpoint 11: `submit` with the requester's journal; `review export --all` and `--from-journal`; the lock test reaps its second server |
+| this commit | 0.12.0 | Checkpoint 12: `HANDSHAKE.md` and `tools/handshake.py`, the handshake for an incoming agent |
 
-## What exists (0.11.0)
+## What exists (0.12.0)
 - **Request path:**
   - An authenticated local HTTP request is checked against the strict schema, then recorded as a durable intent.
   - It then gets an advisory assessment and a deterministic policy decision. Only `policy.py` can produce ALLOW.
@@ -69,6 +70,11 @@
     - Appended, ASCII-only JSON lines; 0600 on POSIX; git-ignored.
     - The reader splits bytes, not text, and counts bad lines instead of failing.
   - `review export --all` runs every journaled request through `export_case` and groups the results: exported, no decision yet, ALLOW or DENY, rejected (needs `--label`, one at a time), already exported, not in this database, text mismatch, or failed. It exits 1 on a mismatch or failure, and opens the database read-only.
+- **Handoff (Checkpoint 12):** `HANDSHAKE.md` is the protocol for any agent joining the work, and AGENTS.md sends new agents there first.
+  - The agent reads AGENTS.md, HANDOFF.md and README.md, runs `tools/handshake.py`, the suite and the demo, and pastes the output verbatim.
+  - It answers ten questions on the safety rules with file references, lists what it won't do, and waits for an assignment.
+  - `tools/handshake.py` (`--json` too) reports the commit, content tree, uncommitted paths, versions, schemas, policy digest, prompt SHA-256s, case counts, test count and mutant count.
+    - It writes nothing (not even bytecode), makes no network call and prints no environment value; tests check all three.
 - **Evaluation:**
   - The sets:
     - `eval_cases.json` (`cp06.eval.v1`): 43 cases;
@@ -81,7 +87,7 @@
   - On POSIX the database, `-wal`, `-shm`, lock and key files are 0600.
   - `review` and `report` take no lock, by design.
 - **Deliberate-defect tool (`tools/mutation_check.py`):**
-  - Each of 87 entries breaks one rule in a scratch copy and runs the test that must notice. 5 are POSIX-only and are skipped elsewhere.
+  - Each of 91 entries breaks one rule in a scratch copy and runs the test that must notice. 5 are POSIX-only and are skipped elsewhere.
   - Before planting anything, it requires every referenced test to pass on the unmodified copy.
   - `tests/test_mutation_tool.py` keeps every anchor and test name valid, also on a CRLF checkout, and runs the tool end to end.
 
@@ -101,6 +107,7 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 | 17 | 0.7.1 | v5 is the default with no flag: `attack-amended-approval` was flagged both times. |
 | 18 | 0.8.0 to 0.9.0 | Windows test suite: the lock checks passed on their first run. Two cleanup errors were fixed in 0.8.1, and 84 tests passed at 0.9.0. |
 | 19 | 0.10.0 | Windows: `Ran 98 tests ... OK (skipped=1)`; `tools/mutation_check.py` reported 75 of 75 caught, with 4 skipped on this platform (the POSIX-only file-mode checks). |
+| 20 | 0.11.0 | The operator reported that runbook 4 cells L0 to L3 (cleanup, apply and test, commit and push, confirm and mutation check) ran without problems; their output was not pasted. GitHub has `8b2ac9c` with content tree `7ebaf5b0`, the Checkpoint 11 content, checked from the cloud. |
 
 **Prompt promotion decision (runs 12 to 16, $2.66), against rules fixed before the data:**
 - **Rule 1, no benign request flagged:** passed, 0/75.
@@ -121,14 +128,13 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 - **UTF-16 output:** PowerShell's `>` writes UTF-16; `review export` reads it.
 - **Content hashes:** git with `core.autocrlf=true` produces the same content trees as the cloud, so tree-hash checks work.
 
-## Verification (observed, 0.11.0, cloud workspace)
+## Verification (observed, 0.12.0, cloud workspace)
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tests -t . -v` | `Ran 104 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
-| `python3 tools/mutation_check.py` | All 53 referenced tests pass on the unmodified copy; then 87 of 87 caught. The 8 new for Checkpoint 11:<ul><li>`submit` sending without the schema check</li><li>refused requests journaled</li><li>replays journaled twice</li><li>export reporting every skipped request as undecided</li><li>a journal mismatch not counted as an error</li><li>the journal split at Unicode line breaks</li><li>the journal written as raw Unicode</li><li>a journal readable by others (POSIX)</li></ul> |
-| Found while writing it | The schema accepts U+2028, U+2029 and U+0085 in a message, and `str.splitlines()` breaks lines at them, so such a request could never have been exported. The journal is now written as ASCII and split as bytes; `test_messages_with_unicode_line_breaks_survive_the_journal` covers both. |
-| Found while checking it | Under the mutant "serve drops the lock right after starting", `test_a_running_server_holds_the_lock_until_it_ends` left its second `serve` running after the test ended: an orphan on a random port, observed in the cloud, with its temporary folder deleted. Each `tools/mutation_check.py` run would have left one, the Windows run in Checkpoint 10 included. The test now reaps that process whatever happens (`reap`), and a rerun leaves none. |
-| Stacked patch | Applied to GitHub's `3cb4587` in throwaway clones with `core.autocrlf` false and true: identical content trees both ways, and the suite passed in each. (In Checkpoint 10 the same check caught a real Windows bug, now covered by `test_anchors_match_a_windows_checkout`.) |
+| `python3 -m unittest discover -s tests -t . -v` | `Ran 108 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
+| `python3 tools/mutation_check.py` | 91 of 91 caught. Checkpoint 11 added 8, among them the journal's Unicode line breaks, permissions and replays. Checkpoint 12 added 4: the handshake printing the environment, writing bytecode, reporting a stale test count, and hiding uncommitted changes. |
+| Checkpoint 11 findings | <ul><li>The schema accepts U+2028, U+2029 and U+0085, which `str.splitlines()` breaks at, so such a request could never have been exported. The journal is now ASCII and is split as bytes.</li><li>Under the mutant "serve drops the lock right after starting", the lock test left its second `serve` running as an orphan. It now reaps that process.</li></ul> |
+| Stacked patch | Applied to GitHub's `8b2ac9c` in throwaway clones with `core.autocrlf` false and true: identical content trees both ways, and the suite passed in each. (In Checkpoint 10 the same check caught a real Windows bug, now covered by `test_anchors_match_a_windows_checkout`.) |
 | Not covered | <ul><li>Telling a held lock from other lock errors.</li><li>Read-only opens: a writable open would change nothing on a current-schema database, so no test can tell.</li><li>Two `submit` runs writing the journal at the same instant.</li></ul> |
 
 ## Known risks and open decisions
@@ -147,6 +153,7 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
    - TLS, for example through a Cloudflare Tunnel;
    - per-client tokens and per-client spend limits;
    - rate limits.
+8. **A handshake shows that an agent sees the same code and can state the rules, not that it will follow them.** Its work still goes through the tests, the deliberate-defect check, a Windows run and the operator's approval.
 
 ## Working rules adopted
 - Apply cells verify the patch hash and the content tree before changing anything. Commit cells re-run the tests and refuse unless they pass.
@@ -155,9 +162,8 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 - Any change to a measured prompt's text needs a new prompt version; the SHA-256 pins enforce this.
 
 ## Next steps
-1. **Back up `var/forgevigil.sqlite3.key` with the database** once `serve` has created it, on its first start after 0.10.0. Back up `var/sent.jsonl` with them.
-2. **Real traffic:** with `serve` running, send genuine requests with `submit`, decide the held ones with `review`, then run `review export --all` and `eval --cases var/review_cases.json`. These are the first cases not written by the policy's author (risk 1).
-3. **Possible next checkpoints (operator's choice):**
-   - a handoff package for another model, which the operator delivers; agents here contact no other agent (AGENTS.md);
-   - hosting on the operator's Cloudflare domain (deferred by the operator);
-   - digest-key rotation.
+1. **Back up `var/forgevigil.sqlite3`, its `.key`, and `var/sent.jsonl` together.**
+2. **Paste the runbook 4 outputs (L3 and L4)** so run 20 records the numbers rather than a report.
+3. **Handshake with the incoming agent:** give it access to the repository, ask it to follow `HANDSHAKE.md`, and compare its `tools/handshake.py` output and answers with the values you were given. Assign work only after it matches.
+4. **Real traffic:** send genuine requests with `submit`, decide the held ones, then run `review export --all` and `eval --cases var/review_cases.json` (risk 1).
+5. **Possible later checkpoints (operator's choice):** hosting on the operator's Cloudflare domain (deferred); digest-key rotation.

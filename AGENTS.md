@@ -2,6 +2,7 @@
 
 These rules apply to every AI agent, whatever its tool or model, in every session in this repository.
 Operator instructions take precedence over this file.
+An agent new to this repository starts with HANDSHAKE.md and changes nothing until the operator accepts its handshake.
 
 ## Authority
 - Billy Davis (operator) assigns checkpoints. Routine implementation, debugging and local testing
@@ -36,4 +37,5 @@ Operator instructions take precedence over this file.
 - Tests: `python3 -m unittest discover -s tests -t . -v`
 - Smoke demo: `python3 -m forge_vigil demo`
 - Deliberate-defect check (several minutes): `python3 tools/mutation_check.py`; it must report every mutant caught.
+- Handshake report (read-only): `python3 tools/handshake.py`.
 - Stack: Python 3 standard library and `unittest`. Add no dependencies without operator approval.

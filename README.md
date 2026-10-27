@@ -67,6 +67,10 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   requester's copy of the message in a local journal, because the server stores none. `review export --all`
   then turns each operator decision on those requests into a labelled evaluation case, checked against its
   stored fingerprint.
+- **Checkpoint 12:** a handshake for handing the work to another AI agent. [HANDSHAKE.md](HANDSHAKE.md) is the
+  protocol: read the rules, run the checks, answer ten questions on the safety rules, then wait for an
+  assignment. `tools/handshake.py` prints a read-only report of what the repository contains, so the operator
+  can confirm the agent sees the same code.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -77,12 +81,13 @@ Not established yet:
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 104 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 108 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
 python3 -m forge_vigil report                    # summary of var/forgevigil.sqlite3 (read-only)
 python3 tools/mutation_check.py                  # deliberate-defect check: do the tests catch broken rules? (minutes)
+python3 tools/handshake.py                       # what this copy contains: tree, versions, digests, counts (read-only)
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -431,5 +436,7 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/client.py` | `submit`: the local client, and the requester's journal of recorded requests |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 | `tools/mutation_check.py` | the deliberate-defect check: breaks each safety rule in a scratch copy and confirms a test fails |
+| `tools/handshake.py`, `HANDSHAKE.md` | the handshake for an incoming agent: a read-only state report, and the protocol around it |
 
-Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
+Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the work starts with
+[HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
