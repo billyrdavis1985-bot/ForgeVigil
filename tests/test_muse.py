@@ -8,6 +8,7 @@ Muse's real detection quality, which only live runs can measure.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -22,7 +23,16 @@ from forge_vigil.budget import parse_usd
 from forge_vigil.demo import run_demo
 from forge_vigil.errors import ConfigError
 from forge_vigil.fixtures import default_fixtures
-from forge_vigil.muse import ANSWER_NOW_PROMPT, TRUNCATION_RETRY_PROMPT, MuseAssessor, MuseConfig
+from forge_vigil.muse import (
+    ANSWER_NOW_PROMPT,
+    APPROVAL_CLAIMS_RULE,
+    CANDIDATE_PROMPT_VERSION,
+    PROMPT_VERSION,
+    SYSTEM_PROMPTS,
+    TRUNCATION_RETRY_PROMPT,
+    MuseAssessor,
+    MuseConfig,
+)
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService
 from forge_vigil.store import Store
@@ -105,6 +115,28 @@ class LiveAssessorTests(_MuseTest):
         self.assertIn(json.dumps(valid_payload()["message"]), body["messages"][1]["content"])
         # The key never reaches stored state.
         self.assertNotIn(TEST_KEY, dump_all_rows(self.tmp / "state.sqlite3"))
+
+    def test_default_prompt_is_the_measured_one_and_the_candidate_is_opt_in(self):
+        # Live run 11 measured exactly this text; any change to it needs a new prompt version.
+        self.assertEqual(
+            hashlib.sha256(SYSTEM_PROMPTS[PROMPT_VERSION].encode("utf-8")).hexdigest(),
+            "314af944390affa2bdb3ac4e7e5d44b9a3602f8df8b5f2539908d9f86c32fa92",
+        )
+        self.assertEqual(self.config().prompt_version, PROMPT_VERSION)
+        candidate = SYSTEM_PROMPTS[CANDIDATE_PROMPT_VERSION]
+        self.assertIn(APPROVAL_CLAIMS_RULE, candidate)
+        self.assertEqual(candidate.replace(APPROVAL_CLAIMS_RULE + "\n", ""), SYSTEM_PROMPTS[PROMPT_VERSION])
+
+        for version in (PROMPT_VERSION, CANDIDATE_PROMPT_VERSION):
+            with self.subTest(version):
+                self.api.requests.clear()
+                self.api.script(fake.answer())
+                receipt = self.submit(self.service(db_name=f"{version}.sqlite3", prompt_version=version))
+                self.assertEqual((receipt["disposition"], receipt["versions"]["prompt"]), ("ALLOW", version))
+                (request,) = self.api.requests
+                self.assertEqual(request["body"]["messages"][0], {"role": "system", "content": SYSTEM_PROMPTS[version]})
+        with self.assertRaises(ConfigError):
+            self.config(prompt_version="cp99.made-up")
 
     def test_tool_results_go_back_to_the_model_and_cited_facts_are_verified(self):
         self.api.script(

@@ -25,6 +25,8 @@ from .service import ForgeVigilService
 from .store import Store
 
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
+# Never tuned against: these measure whether a prompt change generalises beyond the cases it was made for.
+HOLDOUT_CASES_PATH = Path(__file__).with_name("eval_cases_holdout.json")
 LABELS = ("benign", "attack", "out_of_scope")
 DISPOSITIONS = frozenset({"ALLOW", "BLOCK", "DENY", "REVIEW"})
 MAX_REPEAT = 10
@@ -271,7 +273,8 @@ def run_evaluation(
             from .muse import MuseAssessor
 
             assessor = MuseAssessor(live_config, store, fixtures)
-            mode = f"live assessor {assessor.adapter_id}, spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
+            mode = (f"live assessor {assessor.adapter_id}, prompt {assessor.prompt_version}, "
+                    f"spend cap {format_usd(live_config.spend_cap_nanousd)} USD")
         service = ForgeVigilService(store, assessor, fixtures=fixtures)
         runs = f" x {repeat} runs" if repeat > 1 else ""
         print(f"ForgeVigil evaluation {case_set} - {len(cases)} cases{runs}, {mode}, temporary state\n", file=out)

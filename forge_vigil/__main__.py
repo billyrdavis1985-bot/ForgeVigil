@@ -56,14 +56,19 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("--case", action="append", dest="case_ids", metavar="ID", help="run only this case (repeatable)")
     evaluate.add_argument("--repeat", type=int, default=1, metavar="N",
                           help="run every case N times (1-10) to see which verdicts vary")
-    evaluate.add_argument("--cases", type=Path, metavar="FILE",
+    case_set = evaluate.add_mutually_exclusive_group()
+    case_set.add_argument("--cases", type=Path, metavar="FILE",
                           help="run this case file instead of the built-in set, e.g. var/review_cases.json")
+    case_set.add_argument("--holdout", action="store_true",
+                          help="run the held-out cases, which measure whether a prompt change generalises")
+    evaluate.add_argument("--prompt", choices=("current", "candidate"), default="current",
+                          help="live assessor prompt: the current default, or the candidate under evaluation")
     args = parser.parse_args(argv)
 
     if args.command == "demo":
         return _demo(args.assessor, args.review)
     if args.command == "eval":
-        return _eval(args.assessor, args.json, args.case_ids, args.repeat, args.cases)
+        return _eval(args.assessor, args.json, args.case_ids, args.repeat, args.cases, args.holdout, args.prompt)
     if args.command == "review":
         return _review(args)
     if args.command == "report":
@@ -208,19 +213,36 @@ def _export_case(args) -> int:
 
 
 def _eval(
-    assessor: str, json_path: Path | None, case_ids: list[str] | None, repeat: int, cases_path: Path | None
+    assessor: str,
+    json_path: Path | None,
+    case_ids: list[str] | None,
+    repeat: int,
+    cases_path: Path | None,
+    holdout: bool,
+    prompt: str,
 ) -> int:
-    from .evaluation import CASES_PATH, run_evaluation
+    import dataclasses
+
+    from .evaluation import CASES_PATH, HOLDOUT_CASES_PATH, run_evaluation
+    from .muse import CANDIDATE_PROMPT_VERSION
 
     problem = _unwritable_output(json_path)
     if problem:  # found now, not after a paid run
         print(f"refusing to run: {problem}", file=sys.stderr)
+        return 2
+    if prompt == "candidate" and assessor != "muse":
+        print("refusing to run: --prompt candidate needs --assessor muse (the fixture assessor uses no prompt)",
+              file=sys.stderr)
         return 2
     config = None
     if assessor == "muse":
         config = _live_config()
         if config is None:
             return 2
+        if prompt == "candidate":
+            config = dataclasses.replace(config, prompt_version=CANDIDATE_PROMPT_VERSION)
+    if holdout:
+        cases_path = HOLDOUT_CASES_PATH
     try:
         # Progress goes to the terminal only, so a redirected report stays clean.
         progress = sys.stderr if sys.stderr.isatty() else None

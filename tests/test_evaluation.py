@@ -17,7 +17,15 @@ from pathlib import Path
 
 from forge_vigil.assessment import format_usd
 from forge_vigil.budget import parse_usd
-from forge_vigil.evaluation import CaseResult, format_report, load_case_set, run_cases, run_evaluation, summarize
+from forge_vigil.evaluation import (
+    HOLDOUT_CASES_PATH,
+    CaseResult,
+    format_report,
+    load_case_set,
+    run_cases,
+    run_evaluation,
+    summarize,
+)
 from forge_vigil.fixtures import OPERATOR_ACTOR_ID, default_fixtures
 from forge_vigil.policy import approval_check, scope_denial
 from forge_vigil.muse import MuseAssessor, MuseConfig
@@ -42,11 +50,7 @@ class EvaluationTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
 
-    def test_shipped_cases_are_valid_and_balanced(self):
-        version, cases = load_case_set()  # every request also passes the real request schema
-        self.assertEqual(version, "cp06.eval.v1")
-        self.assertEqual(Counter(case.label for case in cases), {"benign": 17, "attack": 19, "out_of_scope": 7})
-        self.assertLessEqual(CP03_CASE_IDS, {case.case_id for case in cases})
+    def assert_labels_agree_with_policy(self, cases) -> None:
         fixtures = default_fixtures()
         for case in cases:
             request = case.request
@@ -63,6 +67,28 @@ class EvaluationTests(unittest.TestCase):
                     self.assertEqual(case.expect, ("ALLOW",) if approval == "verified" else ("REVIEW",))
                 if case.label == "out_of_scope":
                     self.assertEqual(case.expect, ("DENY",))
+
+    def test_shipped_cases_are_valid_and_balanced(self):
+        version, cases = load_case_set()  # every request also passes the real request schema
+        self.assertEqual(version, "cp06.eval.v1")
+        self.assertEqual(Counter(case.label for case in cases), {"benign": 17, "attack": 19, "out_of_scope": 7})
+        self.assertLessEqual(CP03_CASE_IDS, {case.case_id for case in cases})
+        self.assert_labels_agree_with_policy(cases)
+
+    def test_holdout_cases_are_valid_and_separate_from_the_tuning_set(self):
+        version, holdout = load_case_set(HOLDOUT_CASES_PATH)
+        self.assertEqual(version, "cp07.holdout.v1")
+        self.assertEqual(Counter(case.label for case in holdout), {"attack": 9, "benign": 8, "out_of_scope": 1})
+        self.assert_labels_agree_with_policy(holdout)
+        _, tuning = load_case_set()
+        self.assertFalse({c.case_id for c in holdout} & {c.case_id for c in tuning})
+        self.assertFalse({c.request.message for c in holdout} & {c.request.message for c in tuning})
+        # The cases that matter most: manipulation carrying a valid approval, where a model miss means delivery.
+        fixtures = default_fixtures()
+        verified = [c for c in holdout if c.label == "attack" and approval_check(
+            fixtures, OPERATOR_ACTOR_ID, c.request.document_id, c.request.recipient_id, c.request.approval_ref
+        ) == "verified"]
+        self.assertEqual(len(verified), 6)
 
     def test_live_path_scores_verdicts_and_never_calls_the_model_out_of_scope(self):
         api = fake.FakeMuseAPI()
@@ -190,6 +216,13 @@ class EvaluationTests(unittest.TestCase):
             self.assertIn("--repeat must be 1-10", proc.stderr)
         proc = run("--cases", str(self.tmp / "missing.json"))
         self.assertEqual(proc.returncode, 2)
+        proc = run("--holdout")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("cp07.holdout.v1 - 18 cases", proc.stdout)
+        self.assertEqual(run("--holdout", "--cases", str(self.tmp / "x.json")).returncode, 2)
+        proc = run("--prompt", "candidate")  # the fixture assessor has no prompt to swap
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--prompt candidate needs --assessor muse", proc.stderr)
         # A bad --json path is refused before anything runs, not after a paid run.
         proc = run("--json", str(self.tmp / "no-such-folder" / "out.json"))
         self.assertEqual(proc.returncode, 2)
