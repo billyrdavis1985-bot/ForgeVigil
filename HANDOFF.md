@@ -26,7 +26,7 @@
 | `0a73f65` | 0.8.0 | Checkpoint 08: one server per database; owner-only state files on POSIX |
 | `6d3dd26` | 0.8.1 | Windows cleanup fixes in the lock tests (first Windows run) |
 | `cc13bfb` | 0.9.0 | Checkpoint 09: `review show`; `review list --pending` |
-| (patch) | 0.10.0 | Checkpoint 10: keyed request fingerprints; `tools/mutation_check.py`; this consolidation |
+| `8febbf4` | 0.10.0 | Checkpoint 10: keyed request fingerprints; `tools/mutation_check.py`; this consolidation |
 
 ## What exists (0.10.0)
 - **Request path:**
@@ -90,6 +90,7 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 | 12 to 16 | 0.7.0 | **Prompt v5 vs v4** (decision below). On the held-out set, v4 delivered `holdout-meeting-waiver` in all 3 runs; v5 flagged 27/27 and delivered 0. |
 | 17 | 0.7.1 | v5 is the default with no flag: `attack-amended-approval` was flagged both times. |
 | 18 | 0.8.0 to 0.9.0 | Windows test suite: the lock checks passed on their first run. Two cleanup errors were fixed in 0.8.1, and 84 tests passed at 0.9.0. |
+| 19 | 0.10.0 | Windows: `Ran 98 tests ... OK (skipped=1)`; `tools/mutation_check.py` reported 75 of 75 caught, with 4 skipped on this platform (the POSIX-only file-mode checks). |
 
 **Prompt promotion decision (runs 12 to 16, $2.66), against rules fixed before the data:**
 - **Rule 1, no benign request flagged:** passed, 0/75.
@@ -116,7 +117,7 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 | `python3 -m unittest discover -s tests -t . -v` | `Ran 98 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
 | `python3 tools/mutation_check.py` | All 48 referenced tests pass on the unmodified copy; then 79 of 79 caught, in about 90 s. The 8 new for Checkpoint 10:<ul><li>fingerprints made without the key</li><li>replays comparing fingerprints as plain text</li><li>a missing key silently replaced</li><li>the store never reporting keyed records</li><li>a malformed key accepted</li><li>export guessing past a missing key</li><li>`serve` crashing on a key problem</li><li>a key file readable by others (POSIX)</li></ul> |
 | Stacked patch | A simulated PC chain from `cc13bfb` gave identical content with `core.autocrlf` false and true, and the tests passed. The first CRLF run caught a real Windows bug: the tool matched anchors against raw `\r\n` text. Fixed: it normalizes line ends first (`mutated_source`), and `test_anchors_match_a_windows_checkout` keeps it that way. |
-| Not covered | <ul><li>The Checkpoint 10 tests on Windows; the operator's next run is that check.</li><li>Telling a held lock from other lock errors.</li><li>Read-only opens: a writable open would change nothing on a current-schema database, so no test can tell.</li></ul> |
+| Not covered | <ul><li>Telling a held lock from other lock errors.</li><li>Read-only opens: a writable open would change nothing on a current-schema database, so no test can tell.</li></ul> |
 
 ## Known risks and open decisions
 1. **All 61 evaluation cases are fictional and share an author with the policy and prompt rules.** Real decisions turned into cases with `review export` are the independent check, and there are none yet.
@@ -140,5 +141,8 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 - Any change to a measured prompt's text needs a new prompt version; the SHA-256 pins enforce this.
 
 ## Next steps
-1. **Operator:** apply and commit Checkpoint 10, then optionally run `tools/mutation_check.py` on Windows (free, several minutes).
-2. **Possible next checkpoints:** real-traffic tooling (turning genuine decisions into evaluation cases); hosting (deferred by the operator); key rotation.
+1. **Back up `var/forgevigil.sqlite3.key` with the database** once `serve` has created it, on its first start after 0.10.0.
+2. **Possible next checkpoints (operator's choice):**
+   - real-traffic tooling, turning genuine operator decisions into evaluation cases;
+   - hosting on the operator's Cloudflare domain (deferred by the operator);
+   - digest-key rotation.
