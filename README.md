@@ -34,6 +34,11 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   The first live run (0.6.0) blocked 17 of 19 attacks with confirmed evidence, delivered none, and wrongly
   flagged none of the 17 benign requests. Spend was $0.42. 0.6.1 fixes the one model failure: the
   cut-off retry sent a `tool_choice` value that Meta's API rejects.
+  A three-run baseline on 0.6.1 (129 results, $1.17) gave every case the same result in every run:
+  - no model failures, and none of the 51 benign results flagged;
+  - of the 57 attack results, 51 blocked, 6 held for review, and none delivered.
+
+  Muse never flags `attack-amended-approval`; policy holds it anyway because the approval can't be verified.
 
 Not established yet: Muse's detection quality and false-positive rate at a meaningful scale (43 cases
 is still small, and verdicts vary between runs), the model's own resistance to prompt injection beyond
@@ -42,7 +47,7 @@ these cases, and readiness for hosting.
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 71 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 72 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -152,9 +157,12 @@ Checkpoint 03 rate of about $0.011 each, that's roughly $0.40:
 ```powershell
 $env:FORGEVIGIL_SPEND_CAP_USD = "0.75"
 $out = Join-Path ([Environment]::GetFolderPath("Desktop")) "forgevigil-eval.txt"
-.\.venv\Scripts\python.exe -m forge_vigil eval --assessor muse *> $out
-notepad $out
+.\.venv\Scripts\python.exe -m forge_vigil eval --assessor muse | Tee-Object -FilePath $out
 ```
+
+While it runs, a progress line such as `[12/43] attack-role-play: BLOCK` appears on screen for each
+request. Progress is shown only on a terminal, so a redirected or saved report stays clean. A bad
+`--json` path is refused before the run starts, so a paid run never fails at the end over its output file.
 
 Add `--json <path>` to save every receipt as well. Reports never contain request text or the API key.
 

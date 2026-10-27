@@ -6,6 +6,7 @@ these tests check the scoring and the safety rules, not Muse's judgement.
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
@@ -16,7 +17,7 @@ from pathlib import Path
 
 from forge_vigil.assessment import format_usd
 from forge_vigil.budget import parse_usd
-from forge_vigil.evaluation import CaseResult, format_report, load_case_set, run_cases, summarize
+from forge_vigil.evaluation import CaseResult, format_report, load_case_set, run_cases, run_evaluation, summarize
 from forge_vigil.fixtures import OPERATOR_ACTOR_ID, default_fixtures
 from forge_vigil.policy import approval_check, scope_denial
 from forge_vigil.muse import MuseAssessor, MuseConfig
@@ -169,6 +170,7 @@ class EvaluationTests(unittest.TestCase):
         report = json.loads(text)
         self.assertEqual((report["summary"]["case_set"], len(report["cases"])), ("cp06.eval.v1", 43))
         self.assertNotIn("maintenance mode", text)  # receipts carry digests, never request text
+        self.assertNotIn("[1/43]", proc.stdout + proc.stderr)  # progress only goes to a terminal
 
     def test_command_can_rerun_selected_cases_only(self):
         def run(*args):
@@ -188,6 +190,22 @@ class EvaluationTests(unittest.TestCase):
             self.assertIn("--repeat must be 1-10", proc.stderr)
         proc = run("--cases", str(self.tmp / "missing.json"))
         self.assertEqual(proc.returncode, 2)
+        # A bad --json path is refused before anything runs, not after a paid run.
+        proc = run("--json", str(self.tmp / "no-such-folder" / "out.json"))
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("does not exist", proc.stderr)
+        self.assertNotIn("ForgeVigil evaluation", proc.stdout)
+
+    def test_progress_lines_report_each_finished_request(self):
+        progress, out = io.StringIO(), io.StringIO()
+        status = run_evaluation(out=out, progress=progress, repeat=2,
+                                case_ids=["benign-standard", "scope-unknown-document"])
+        self.assertEqual(status, 0)
+        self.assertEqual(progress.getvalue().splitlines(), [
+            "[1/4] benign-standard #1: ALLOW", "[2/4] scope-unknown-document #1: DENY",
+            "[3/4] benign-standard #2: ALLOW", "[4/4] scope-unknown-document #2: DENY",
+        ])
+        self.assertNotIn("[1/4]", out.getvalue())  # the report itself stays free of progress lines
 
     def write_cases(self, cases: list[dict], name: str = "cases.json") -> Path:
         path = self.tmp / name

@@ -71,6 +71,17 @@ def main(argv: list[str] | None = None) -> int:
     return _serve(args.db, args.port, args.assessor)
 
 
+def _unwritable_output(path: Path | None) -> str | None:
+    """Why an output file could not be written, checked before any work (or spend) starts."""
+    if path is None:
+        return None
+    if path.is_dir():
+        return f"{path} is a folder, not a file"
+    if not path.parent.is_dir():
+        return f"the folder for {path} does not exist"
+    return None
+
+
 def _live_config():
     """Validated live-assessor settings, or None after printing why they are unusable."""
     from .errors import ConfigError
@@ -102,6 +113,10 @@ def _report(db_path: Path, json_path: Path | None) -> int:
     if not db_path.is_file():
         print(f"refusing to run: no database at {db_path}", file=sys.stderr)
         return 2
+    problem = _unwritable_output(json_path)
+    if problem:
+        print(f"refusing to run: {problem}", file=sys.stderr)
+        return 2
     try:
         report = build_report(Store(db_path, read_only=True))
     except (RuntimeError, sqlite3.Error) as exc:
@@ -109,7 +124,11 @@ def _report(db_path: Path, json_path: Path | None) -> int:
         return 2
     print(format_report(report))
     if json_path is not None:
-        json_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        try:
+            json_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError as exc:
+            print(f"could not write {json_path} ({exc.strerror})", file=sys.stderr)
+            return 1
         print(f"\nreport written to {json_path}")
     return 0
 
@@ -193,14 +212,20 @@ def _eval(
 ) -> int:
     from .evaluation import CASES_PATH, run_evaluation
 
+    problem = _unwritable_output(json_path)
+    if problem:  # found now, not after a paid run
+        print(f"refusing to run: {problem}", file=sys.stderr)
+        return 2
     config = None
     if assessor == "muse":
         config = _live_config()
         if config is None:
             return 2
     try:
+        # Progress goes to the terminal only, so a redirected report stays clean.
+        progress = sys.stderr if sys.stderr.isatty() else None
         return run_evaluation(live_config=config, json_path=json_path, case_ids=case_ids, repeat=repeat,
-                              cases_path=cases_path or CASES_PATH)
+                              cases_path=cases_path or CASES_PATH, progress=progress)
     except (OSError, ValueError) as exc:
         print(f"refusing to run: {exc}", file=sys.stderr)
         return 2

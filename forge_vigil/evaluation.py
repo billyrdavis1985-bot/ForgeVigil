@@ -16,7 +16,7 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TextIO
+from typing import Callable, TextIO
 
 from .assessment import FAILED_STATUSES, fixed_clean_assessor, format_usd
 from .fixtures import OPERATOR_ACTOR_ID, PUBLIC_SPEC_CONTENT, default_fixtures
@@ -123,8 +123,14 @@ class CaseResult:
         return "" if self.as_expected else "unexpected"
 
 
-def run_cases(service: ForgeVigilService, cases: list[EvalCase], repeat: int = 1) -> list[CaseResult]:
-    """One full pass over the cases per run, so a spend cap that runs out affects every case alike."""
+def run_cases(
+    service: ForgeVigilService,
+    cases: list[EvalCase],
+    repeat: int = 1,
+    progress: Callable[[int, int, CaseResult], None] | None = None,
+) -> list[CaseResult]:
+    """One full pass over the cases per run, so a spend cap that runs out affects every case alike.
+    `progress(done, total, result)` is called after each request."""
     results = []
     for run in range(1, repeat + 1):
         for case in cases:
@@ -134,6 +140,8 @@ def run_cases(service: ForgeVigilService, cases: list[EvalCase], repeat: int = 1
             if outcome.receipt is None:
                 raise RuntimeError(f"case {case.case_id} run {run} produced no receipt ({outcome.kind})")
             results.append(CaseResult(case, outcome.receipt, run))
+            if progress is not None:
+                progress(len(results), len(cases) * repeat, results[-1])
     return results
 
 
@@ -238,11 +246,13 @@ def run_evaluation(
     cases_path: Path = CASES_PATH,
     case_ids: list[str] | None = None,
     repeat: int = 1,
+    progress: TextIO | None = None,
 ) -> int:
     """Exit status 1 only for a broken safety rule; detection misses are reported, not failed.
 
     `case_ids` runs just those cases, for cheap re-runs of the ones that need attention.
     `repeat` runs every case that many times (1-10) to measure how stable the verdicts are.
+    `progress` gets one short line per finished request, so a long live run shows it is working.
     """
     if not 1 <= repeat <= MAX_REPEAT:
         raise ValueError(f"--repeat must be 1-{MAX_REPEAT}")
@@ -265,7 +275,11 @@ def run_evaluation(
         service = ForgeVigilService(store, assessor, fixtures=fixtures)
         runs = f" x {repeat} runs" if repeat > 1 else ""
         print(f"ForgeVigil evaluation {case_set} - {len(cases)} cases{runs}, {mode}, temporary state\n", file=out)
-        results = run_cases(service, cases, repeat)
+        def report_progress(done: int, total: int, result: CaseResult) -> None:
+            run = f" #{result.run}" if repeat > 1 else ""
+            print(f"[{done}/{total}] {result.case.case_id}{run}: {result.disposition}", file=progress, flush=True)
+
+        results = run_cases(service, cases, repeat, report_progress if progress is not None else None)
         summary = dict(summarize(results, store), case_set=case_set)
     print(format_report(results, summary), file=out)
     if json_path is not None:
@@ -277,6 +291,11 @@ def run_evaluation(
                 for r in results
             ],
         }
-        Path(json_path).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-        print(f"\nfull results written to {json_path}", file=out)
+        try:
+            Path(json_path).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError as exc:
+            # The run itself finished and is reported above; only the extra copy failed.
+            print(f"\ncould not write {json_path} ({exc.strerror}); the results above are complete", file=out)
+        else:
+            print(f"\nfull results written to {json_path}", file=out)
     return 1 if summary["critical"] else 0

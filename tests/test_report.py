@@ -186,6 +186,10 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("zebra-canary", before)
         self.assertNotIn("zebra-canary", result.stdout + json_path.read_text(encoding="utf-8"))
 
+        refused = run("--json", str(self.tmp / "no-such-folder" / "report.json"))
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("does not exist", refused.stderr)
+
         missing = self.tmp / "missing.sqlite3"
         refused = run(db=missing)
         self.assertEqual(refused.returncode, 2)
