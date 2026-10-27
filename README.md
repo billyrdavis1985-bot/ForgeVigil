@@ -60,6 +60,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 09:** a detail view for decisions. `review show <request_id>` explains one case in plain
   language: why it was held, what the model found, which evidence checked out, the cost, and the exact
   commands for each allowed decision. `review list --pending` shows only undecided cases.
+- **Checkpoint 10:** keyed request fingerprints, so a copy of the database alone can't confirm a guessed
+  message. Records from before 0.10.0 still replay. The deliberate-defect check now lives in the repo as
+  `tools/mutation_check.py`, kept honest by a fast test.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -70,11 +73,12 @@ Not established yet:
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 84 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 98 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
 python3 -m forge_vigil report                    # summary of var/forgevigil.sqlite3 (read-only)
+python3 tools/mutation_check.py                  # deliberate-defect check: do the tests catch broken rules? (minutes)
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -88,8 +92,17 @@ server is already using ...`. This matters because a starting server holds any u
 REVIEW, which would wrongly catch requests the first server is still working on. `review` and `report` are
 meant to run alongside `serve` and take no lock. The lock file `<db>.lock` stays next to the database, and
 the operating system frees it when the server ends, even after a crash. On Linux and macOS the database,
-its `-wal` and `-shm` files and the lock are readable by your user only. On Windows they follow your
-profile folder's permissions.
+its `-wal` and `-shm` files, the lock and the key are readable by your user only. On Windows they follow
+your profile folder's permissions.
+
+**Request fingerprints:** the database never stores message text, only a digest of each request. From
+0.10.0 that digest is keyed (`hmac-sha256:`) with a secret in `<db>.key`, which `serve` creates on first
+start. Someone holding a copy of the database alone can't confirm a guessed message by hashing it.
+Records from earlier versions (`sha256:`) still replay normally.
+
+**Back up `<db>.key` together with the database.** If the key goes missing while the database holds
+keyed records, `serve` refuses to start rather than minting a new key, which would make every earlier
+request look changed.
 
 ## Live Muse assessor (Checkpoint 02)
 
@@ -234,7 +247,8 @@ deliver that case no more often than the old one over 10 runs. Both delivered it
 - **Labels:** `false-positive` and `release` mean benign, and `confirm` means attack. A `reject` doesn't
   say which, so it needs `--label benign` or `--label attack`.
 - **Message text:** the database holds only a digest of each message, so you supply the original text in
-  a file. It's accepted only if it reproduces the recorded digest exactly. UTF-8 and UTF-16 files, and
+  a file. It's accepted only if it reproduces the recorded digest exactly. Records made since 0.10.0 need
+  the database's key file for that check. UTF-8 and UTF-16 files, and
   Windows line endings, are fine.
 - **Storage:** cases go to `var/review_cases.json`, which git ignores because it contains request text.
 
@@ -348,7 +362,8 @@ and goes to REVIEW. It is never reported as forged.
 
 | Module | Responsibility |
 |---|---|
-| `forge_vigil/schema.py` | strict request parsing, input digest |
+| `forge_vigil/schema.py` | strict request parsing |
+| `forge_vigil/digests.py` | keyed request fingerprints, the key file, matching records from older versions |
 | `forge_vigil/fixtures.py` | frozen, server-owned fictional fixtures |
 | `forge_vigil/assessment.py` | assessor interface, fixture assessors, output validation, usage |
 | `forge_vigil/muse.py` | live Muse assessor: Meta Model API transport, versioned prompts, tool loop, spend reservations |
@@ -367,5 +382,6 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/instance.py` | one server per database (an OS file lock) and owner-only state files |
 | `forge_vigil/review_cases.py` | `review export`: decided requests as digest-checked evaluation cases |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
+| `tools/mutation_check.py` | the deliberate-defect check: breaks each safety rule in a scratch copy and confirms a test fails |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).

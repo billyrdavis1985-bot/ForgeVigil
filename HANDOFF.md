@@ -1,204 +1,144 @@
 # HANDOFF: ForgeVigil
 
-## Session
-- **Checkpoints 02 to 09**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1, 0.6.2 and 0.8.1 fixes and the 0.7.1 prompt promotion, all driven by live or Windows runs. Checkpoints 08 and 09 were built ahead while the operator was away from the PC, at their request. All were assigned by the operator in the session that built Checkpoint 01.
-- **Date:** 2026-10-26, America/New_York. By the system clock: Checkpoint 02 from about 15:56 EDT, 0.2.1 from 16:25, Checkpoint 03 from 16:52, 0.3.1 from 17:16, Checkpoint 04 from 17:26, 0.4.1 from 17:52, Checkpoint 05 until about 18:20, Checkpoint 06 until about 19:20, 0.6.1 after live run 8, 0.6.2 from about 20:00 after run 11, Checkpoint 07 until about 21:05, 0.7.1 at about 21:45 after runs 12 to 16; Checkpoints 08 and 09 the next day.
-- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07), `4a88eb3` (0.7.1), `0a73f65` (Checkpoint 08). All were authored and pushed by the operator; the cloud session cannot push (403). 0.8.1 is a patch on top of Checkpoint 08's content (tree `b4812b67…`), and Checkpoint 09 (0.9.0) is a patch on top of 0.8.1's (tree `60449cb1…`). Commits never carry attribution trailers (see AGENTS.md).
+## Session and authority
+- **Who decides:** Billy Davis (operator) assigns checkpoints and approves every commit (see AGENTS.md). All commits are authored and pushed by the operator as `Billy Davis <…noreply…>`, with no attribution trailers.
+- **How changes ship:** the cloud session cannot push (403), so each change is delivered as a patch plus guarded PowerShell cells.
+  - Apply cells check the patch's SHA-256 and the repository's content tree hash before changing anything.
+  - Commit cells re-run the test suite and refuse unless it passes.
+- **When:** 2026-10-26 (Checkpoints 02 to 07) and 2026-10-27 (0.7.1 to Checkpoint 10), America/New_York.
 
-## What exists now
-- **Checkpoint 01:** authenticated local request → advisory assessment → deterministic permission → at most one outbox item → durable receipt.
-- **Checkpoint 02 and 0.2.1:**
-  - Live Muse assessor (`muse.py`) with three read-only investigation tools.
-  - The false-positive check (`evidence.py`).
-  - A spend ledger that reserves each call's worst-case cost before the call.
-  - Shape-only diagnostics, and specific codes for truncated, empty and refused answers.
-- **Checkpoint 03 and 0.3.1:**
-  - `eval` runs 16 labelled fictional cases. Safety rules decide the exit status; detection and false-positive rates are reported.
-  - Each model failure is named and never counted as correct.
-  - `--case` re-runs selected cases.
-  - The output cap is 4096.
-  - "None" findings may cite no evidence.
-- **Checkpoint 04 (operator review):** a local `review list|release|reject|confirm|false-positive` command.
-  - Only REVIEW cases can be released, after the scope checks are re-run against current server data.
-  - Releasing a model-flagged request needs `--despite-threat`.
-  - Each request takes at most one decision, written atomically with its delivery.
-  - Decisions are append-only records linked to the original receipt.
-  - There is no HTTP route to review. AGENTS.md carries this rule.
-- **0.4.1:**
-  - A cut-off answer (finish reason `length`) gets one retry: one more budget-reserved call, with no tools, asking for just the JSON.
-  - Diagnostics gain `answer_retries`.
-  - The prompt version is now `cp02.muse-assessor.v3`, because the retry text is new prompt content.
-- **Checkpoint 05 (0.5.0):**
-  - A replayed request shows any operator decision on it as `review` (`review_id`, `decision`, `decided_at`, `delivered`, `effect_id`), without the reviewer's name. `review` is `null` before a decision.
-  - After a `release`, a replay answers 200 with `delivered: true`, while the original receipt is returned unchanged.
-  - `report` gives one summary of a database:
-    - requests by disposition;
-    - deliveries, allowed vs released;
-    - pending reviews and decisions;
-    - threat flags, unconfirmed-evidence holds and false-positive marks;
-    - model failures by cause;
-    - spend and tokens;
-    - the top reasons.
+## History on `main`
+| Commit | Version | What |
+|---|---|---|
+| `bb4b85a` | 0.1 | Checkpoint 01: fixture-mode request protection slice |
+| `822fc0b` | 0.2.0 | Checkpoint 02: live Muse assessor, evidence checks, spend cap |
+| `0d77111` | 0.2.1 | answer diagnostics; larger output allowance (run 1) |
+| `344859c` | 0.3.0 | Checkpoint 03: labelled evaluation |
+| `2e22568` | 0.3.1 | fixes from the first live evaluation (run 3) |
+| `3fef440` | 0.4.0 | Checkpoint 04: operator review and release |
+| `b0885f8` | 0.4.1 | one retry for an answer cut off at the output cap (run 5) |
+| `80f18e5` | 0.5.0 | Checkpoint 05: replays show the review outcome; read-only report |
+| `ad0f3a0` | 0.6.0 | Checkpoint 06: 43-case evaluation, `--repeat`, `review export` |
+| `bbd9674` | 0.6.1 | retry with `tool_choice: "auto"` and low reasoning effort; API error codes recorded (run 8) |
+| `b1ee36e` | 0.6.2 | eval progress lines; `--json` paths checked before running (runs 10 and 11) |
+| `d74fcf6` | 0.7.0 | Checkpoint 07: candidate prompt behind `eval --prompt`; held-out cases |
+| `4a88eb3` | 0.7.1 | v5 prompt promoted to default; v4 kept as `--prompt previous` (runs 12 to 16) |
+| `0a73f65` | 0.8.0 | Checkpoint 08: one server per database; owner-only state files on POSIX |
+| `6d3dd26` | 0.8.1 | Windows cleanup fixes in the lock tests (first Windows run) |
+| `cc13bfb` | 0.9.0 | Checkpoint 09: `review show`; `review list --pending` |
+| (patch) | 0.10.0 | Checkpoint 10: keyed request fingerprints; `tools/mutation_check.py`; this consolidation |
 
-    It has optional `--json` output. Ties rank by name, so the output is deterministic.
-  - The report opens the database read-only at the SQLite level. It refuses an older schema rather than upgrading it, and refuses a missing or non-database file (exit 2).
-  - `Store.snapshot()` reads receipts, reviews, delivery keys and spend in one read transaction, so the figures agree while `serve` writes. It never reads outbox bodies.
-  - `demo --review` now replays the released case. Every demo ends with the report.
-  - Failed-assessment statuses now live in one place (`assessment.FAILED_STATUSES`).
-  - Observed while testing: the database stores no request message text (only digests), so no report can show it.
-- **Checkpoint 06 (0.6.0):**
-  - The evaluation set `cp06.eval.v1` has 43 cases: 17 benign (11 new, mostly alarming-sounding), 19 attacks (12 new) and 7 out of scope (4 new). The 16 Checkpoint 03 cases are unchanged.
-  - A test checks each shipped case's label and expected outcome against `policy.scope_denial` and `policy.approval_check`.
-  - `eval --repeat N` (1–10) runs one full pass per run, with request ids suffixed `-r2` and up. It reports each model-assessed case whose disposition or finding changed (`stability`). Case ids are limited to 60 characters so the suffix fits.
-  - `eval --cases FILE` runs another case file. Case files are validated before anything runs, and a malformed file exits 2.
-  - `review export <request_id> --message-file F [--label] [--out]`:
-    - It needs an operator decision. The label comes from it: false_positive and release give benign, confirm gives attack, and reject needs `--label`. A contradicting `--label` is refused.
-    - The message text is accepted only if it reproduces the receipt's `input_digest`.
-    - Message files may be UTF-8 (with or without a byte-order mark) or UTF-16, with CRLF line ends or one trailing newline.
-    - The expected outcome is ALLOW for benign with a verified approval, otherwise REVIEW, and BLOCK/REVIEW for attacks.
-    - The case is appended atomically to `var/review_cases.json`, which git ignores. The database is opened read-only.
-  - New store reader: `get_review`.
-- **0.6.1 (fix from live run 8):**
-  - Meta's chat completions endpoint accepts only `tool_choice: "auto"`. The assessor sent `"none"` on every cut-off retry and on any call after the tools ran out. Run 8 got a 4xx (`ASSESSMENT_MODEL_REQUEST_REJECTED`) on the first live retry ever.
-    - The evidence that `"none"` is rejected comes from several third-party integrations, found by web search; this workspace cannot reach their pages or Meta's docs. Run 8 is consistent with it, but did not record the status code.
-  - Every call now sends `"auto"`. When tools are over, the model gets `ANSWER_NOW_PROMPT`, and code refuses any further tool call without running it, as before. The retry text adds "Do not call any tools".
-  - The retry adds `reasoning_effort: "low"` (first calls send none). Third-party sources list the levels minimal, low, medium, high and xhigh. This has not been verified live.
-  - The prompt version is now `cp02.muse-assessor.v4`.
-  - A refused call records `http_status` and `api_error` (`type`, `code` and `param`, each kept only if it matches `[A-Za-z0-9_.[\]-]{1,64}`). The error message text is never kept. Eval failure lines now show, for example, `model failure (http=400, param=tool_choice)` instead of the previous reply's finish reason.
-  - The test fake now rejects any `tool_choice` other than `"auto"` with HTTP 400, and that reproduced run 8's failure before the fix.
-  - A test had been passing on an unscripted 500 since 0.4.1. It now scripts the retry. A probe showed no other test hits an unscripted reply.
-- **0.6.2 (usability fixes from runs 10 and 11):**
-  - On a terminal, `eval` prints one progress line per finished request to stderr, for example `[12/129] attack-role-play #1: BLOCK`. It prints nothing when stderr is redirected, so saved reports stay clean. Run 11 sat silent for over 5 minutes under `*>`.
-  - `eval --json` and `report --json` refuse a missing folder, or a path that is a folder, before anything runs (exit 2). Before this, a paid eval would finish and only then fail with a misleading "refusing to run".
-  - If writing the JSON still fails at the end, eval says the printed results are complete and keeps its exit status.
-- **Checkpoint 07 (0.7.0), candidate prompt rule and held-out cases:**
-  - **Prompt versions:** `muse.SYSTEM_PROMPTS` maps a version to its text.
-    - The default, `cp02.muse-assessor.v4`, is unchanged, and a test pins its SHA-256 to the text measured in run 11.
-    - The candidate, `cp07.muse-assessor.v5`, is v4 plus `APPROVAL_CLAIMS_RULE`, inserted before the answer format. It is worded as a principle: claims that an approval covers more than the registry records, was given outside the registry, or exempts the request from review or checks are APPROVAL_MANIPULATION, whether or not the approval exists.
-  - `MuseConfig.prompt_version` defaults to v4. An unknown version is refused, and receipts record the version used.
-  - **Who uses the candidate:** only `eval --assessor muse --prompt candidate`. `serve` and `demo` cannot select it, and the fixture assessor refuses `--prompt candidate` (exit 2).
-  - **Held-out set `cp07.holdout.v1`:** 18 cases in `eval_cases_holdout.json`, run with `eval --holdout`, which can't be combined with `--cases`.
-    - 9 attacks: 6 with the valid approval HR-2026-118, where a model miss means delivery, and 3 with unknown or missing references.
-    - 8 benign look-alikes (6 expect ALLOW, 2 expect REVIEW) and 1 out-of-scope case.
-    - It was written before the rule was final, and no case ID or message is shared with the tuning set. A test enforces the separation and the labels' agreement with policy.
-    - Fixture baseline: 8 of 8 benign correct, 6 attacks delivered (the valid-approval ones), 3 held, 1 denied.
-  - Eval's header line names the prompt version in live mode.
-- **0.7.1, v5 promoted to the default (the operator chose this after runs 12 to 16):**
-  - `PROMPT_VERSION` is now `cp07.muse-assessor.v5`, used by `serve`, `demo` and `eval`. `PREVIOUS_PROMPT_VERSION` (`cp02.muse-assessor.v4`) stays selectable as `eval --prompt previous`, for comparison and rollback. `--prompt candidate` is gone.
-  - The base text is renamed `BASE_SYSTEM_PROMPT`.
-  - A test pins both prompt texts by SHA-256 to what the live runs measured: v4 `314af944…` (run 11) and v5 `2cad778c…` (runs 13, 14 and 16). The v5 hash was taken before the rename, so the promoted text is byte-identical to the measured one.
-  - The mutation script, which is outside the repo, now first checks that every test it references passes on unmutated code. Before this, a mutant pointing at a renamed test "passed" because the missing test errored. Two Checkpoint 07 mutants briefly did exactly that while this change was in progress.
-- **Checkpoint 08 (0.8.0), one server per database:**
-  - `serve` takes an exclusive OS lock on `<db>.lock` (`instance.InstanceLock`) before it opens the database. It holds the lock until it exits, and a second `serve` on the same file exits 2 with "another ForgeVigil server is already using …".
-    - The defect fixed: startup recovery holds in-progress requests for REVIEW and marks in-flight spend unknown, so a second server could interrupt the first server's live work.
-  - The OS releases the lock however the process ends, so no stale lock is possible. The lock file is left in place and is git-ignored (`*.sqlite3.lock`).
-  - Lock errors are told apart: "already using" only for a held lock (EAGAIN, EWOULDBLOCK, EACCES or EDEADLK). An unopenable or unlockable lock file is reported as such.
+## What exists (0.10.0)
+- **Request path:**
+  - An authenticated local HTTP request is checked against the strict schema, then recorded as a durable intent.
+  - It then gets an advisory assessment and a deterministic policy decision. Only `policy.py` can produce ALLOW.
+  - The result is at most one outbox item, carrying the approved bytes only, plus an append-only receipt.
+  - A replay returns the original receipt and any later operator decision, without the reviewer's name. A released case answers 200.
+- **Live assessor (`muse.py`):** Meta's OpenAI-compatible chat completions with `muse-spark-1.1`.
+  - Tools and limits:
+    - three read-only tools;
+    - at most 4 tool calls and 4 model calls;
+    - an output cap of 4096 tokens;
+    - one retry for a cut-off answer, with `reasoning_effort: "low"`;
+    - `tool_choice` always `"auto"`, the only value Meta accepts. Code refuses tool calls once tools are over.
+  - When the API refuses a call, only its HTTP status and short error identifiers are kept, never the message text.
+  - Prompts are versioned, with both texts pinned by SHA-256 in a test:
+    - `cp07.muse-assessor.v5`, the default: v4 plus `APPROVAL_CLAIMS_RULE`;
+    - `cp02.muse-assessor.v4`, still selectable as `eval --prompt previous`.
+- **False-positive check (`evidence.py`):** a threat blocks only if code confirms every quote and cited fact. Otherwise it is held for REVIEW. An unknown approval reference is uncertainty, never proof of manipulation on its own.
+- **Spend:** each call's worst-case cost is reserved in SQLite against the cap before the call. It settles to the reported usage. A call with unknown usage keeps its full reservation, and in-flight reservations become unknown at restart.
+- **Request fingerprints (Checkpoint 10, `digests.py`):** the database stores a digest of each request, never its message.
+  - New digests are `hmac-sha256:`, keyed with 32 random bytes in `<db>.key`. The key file is hex, owner-only on POSIX, and git-ignored.
+  - Records from before 0.10.0 (`sha256:`) still replay and still export: every comparison uses the scheme its stored digest names, in constant time.
+  - The service loads or creates the key before writing anything. If the key file is missing while keyed records exist, `serve` exits 2 and nothing is changed. A malformed key is refused and never replaced.
+  - `review export` needs the key only for keyed records (`digest_key_missing` otherwise). The receipt schema is `forgevigil.receipt.v4`.
+- **Operator tools:** all local commands, never HTTP or model tools.
+  - Review:
+    - `review list` (`--pending` hides decided cases) and `show <id>`;
+    - decisions: `release`, `reject`, `confirm`, `false-positive`. A release re-checks scope and needs `--despite-threat` if the model flagged a threat. One decision per request, written atomically with its delivery;
+    - `export <id> --message-file F`: the text is verified against the stored digest.
+  - `report`: a read-only, single-snapshot summary.
+  - `review show`, `report` and `review export` open the database read-only.
+- **Evaluation:**
+  - The sets:
+    - `eval_cases.json` (`cp06.eval.v1`): 43 cases;
+    - `eval_cases_holdout.json` (`cp07.holdout.v1`): 18 held-out cases, never tuned against.
+  - Flags: `--repeat N` (reports unstable cases), `--case`, `--cases FILE`, `--holdout`, `--prompt`, `--json`.
+  - A test checks every shipped label against the policy.
+  - Safety-rule breaks exit 1; detection rates are measured, not asserted.
+- **Operations:**
+  - `serve` holds an OS lock on `<db>.lock` for its whole life, so a second server is refused (exit 2) and a crash releases it.
+  - On POSIX the database, `-wal`, `-shm`, lock and key files are 0600.
   - `review` and `report` take no lock, by design.
-  - On POSIX, `secure_state_files` creates a new database 0600 or tightens an existing one, along with its -wal and -shm files; SQLite gives the side files the database's mode. Windows is left to the profile folder's access list.
-  - `serve` creates a missing state folder with mode 0700 and flushes its startup lines.
-  - Tests start real `serve` processes:
-    - a second one is refused while the first runs;
-    - a killed holder frees the lock;
-    - a refused `serve` creates no database;
-    - on POSIX, the state files end up 0600.
-  - Platform coverage: the Windows lock path (`msvcrt.locking`) could not be tested in the cloud workspace. It first ran in the operator's test suite; see 0.8.1.
-- **0.8.1, fixes from the first Windows run of the Checkpoint 08 tests:**
-  - **Observed:** on Windows, every check inside the lock tests passed: a second server was refused, a killed holder freed the lock, and a refused server created nothing. That was the first execution of `msvcrt.locking`. Two tests then errored in temp-folder cleanup with WinError 32, the lock file "being used by another process".
-  - **Cause 1, a test bug:** `test_the_lock_is_released_when_its_process_dies` took the lock at the end and never released it. Windows cannot delete an open file; Linux can, so the cloud run missed it.
-  - **Cause 2, very likely:** a venv's `python.exe` on Windows is a launcher that runs the real interpreter as a child. Killing the launcher ends the child a moment later, so a killed server's files can still be open when cleanup starts.
-  - **Fixes, all in tests only (no product code changed):**
-    - `wait_until_free` takes and releases the lock, and fails if it stays held for 10 s. Both the crash test and `stop()` use it, so a stopped server is only "gone" once its lock is free.
-    - `remove_tree` retries a busy delete for up to 10 s.
-    - A new cleanup check, `files_held_open_under`, fails a test that leaves any file open in its temp folder. It reads `/proc/self/fd` on Linux, so the Windows-only symptom is now caught in the cloud too. Reintroducing the original leak makes it fail.
-  - **Process slip:** the Checkpoint 08 commit cell ran after its test cell reported TESTS FAILED, so `0a73f65` was pushed with these two cleanup errors. From now on, commit cells re-run the test suite and refuse to commit unless it passes.
-- **Checkpoint 09 (0.9.0), review detail view:**
-  - `review show <request_id>` opens the database read-only and prints `review.describe_case`:
-    - the request facts and the approval check;
-    - the outcome, with a plain-language reason from `REASON_EXPLANATIONS` (`ASSESSMENT_*` failures are explained generically);
-    - the model, prompt version, finding, validation error and each evidence ref with its result;
-    - the quote check counts (hashes only), calls, finish reasons, retries, any HTTP refusal, and the cost.
-  - Then the decision if one exists. Otherwise it lists the allowed decisions as copy-ready commands, adding `--despite-threat` only to a release of a model-flagged REVIEW case; a BLOCK is never offered a release.
-  - `--json` prints the receipt and the review. A missing request exits 1, and a missing database exits 2.
-  - Fields are read defensively, so receipts from older versions display.
-  - `review list --pending` hides decided cases.
+- **Deliberate-defect tool (`tools/mutation_check.py`):**
+  - Each of 79 entries breaks one rule in a scratch copy and runs the test that must notice. 4 are POSIX-only and are skipped elsewhere.
+  - Before planting anything, it requires every referenced test to pass on the unmodified copy.
+  - `tests/test_mutation_tool.py` keeps every anchor and test name valid, also on a CRLF checkout, and runs the tool end to end.
 
-## Live runs (operator's PC)
-| Run | Result |
-|---|---|
-| 1. `demo`, 0.2.0 | API shape accepted. One answer cut off at the 800-token cap. Spend $0.0156. |
-| 2. `demo`, 0.2.1 | Both live cases returned clean, evidence-checked JSON. Spend $0.0168. |
-| 3. `eval`, 0.3.0 | Attacks 6 of 7 flagged, 0 delivered; benign 0 of 6 wrongly flagged. 2 model failures (a cap truncation and an evidence-less "none"). Spend $0.129. |
-| 4. `eval --case`, 0.3.1 | Both earlier failures now correct. Spend $0.018. |
-| 5. `demo --review` and full `eval`, 0.4.0 | Demo `RESULT: PASS`. Eval below. |
-| 6. `eval --case attack-verbal-approval`, 0.4.1 | REVIEW `APPROVAL_UNVERIFIED`, finding none, no model failure, not delivered. Spend $0.018. |
-| 7. Tests and `demo --review`, 0.5.0 (fixture only) | `Ran 62 tests ... OK`, `RESULT: PASS`. This confirms the report's read-only `file:` URI open works on Windows. |
-| 8. Full `eval`, 0.6.0, 43 cases | Attacks 17 of 19 blocked with confirmed evidence, 2 held for REVIEW, 0 delivered. Benign 17 of 17 correct, 0 wrongly flagged. Out of scope 7 of 7 denied without the model. 1 model failure. Spend $0.419. |
+## Live evidence (operator's PC)
+Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta's billing is authoritative. Recorded live spend so far is about **$4.67**.
 
-| 9. `eval --case attack-verbal-approval`, 0.6.1 | REVIEW `APPROVAL_UNVERIFIED`, finding threat, no cut-off. Spend $0.017. |
-| 10. Same case with `--repeat 3`, 0.6.1 | All 3 runs: one tool round, then an answer (`finish=tool_calls,stop`), with `retries=0` and no HTTP error. All 3 gave REVIEW `APPROVAL_UNVERIFIED` with finding threat; stable. Spend $0.053. |
-| 11. Full `eval --repeat 3`, 0.6.1, 129 results | Attacks 54 of 57 flagged: 51 blocked, 6 held for review, 0 delivered. Benign 51 of 51 correct, 0 wrongly flagged. Out of scope 21 of 21 denied without the model. 0 model failures. Stability: 36 of 36 model-assessed cases gave the same result in every run. Spend $1.167, about $0.011 per assessment. |
+| Run | Version | Result |
+|---|---|---|
+| 1, 2 | 0.2.0, 0.2.1 | `demo`: API shape accepted. Run 1 was cut off at an 800-token cap; run 2 gave clean, evidence-checked answers. |
+| 3, 4 | 0.3.0, 0.3.1 | First `eval` (16 cases): 6/7 attacks flagged, 0 delivered, 0/6 benign flagged, 2 model failures. Both were fixed (run 4). |
+| 5, 6 | 0.4.0, 0.4.1 | Run 5, full `eval`: 6/7 attacks blocked, 0 delivered, 0/6 benign flagged; 1 cut-off, which led to the 0.4.1 retry. Run 6, the cut-off case alone: held for review, no model failure. |
+| 7 | 0.5.0 | Windows: the report's read-only open works. |
+| 8 | 0.6.0 | 43 cases: 17/19 attacks blocked, 0 delivered, 0/17 benign flagged. The first live retry was rejected because it sent `tool_choice: "none"`, fixed in 0.6.1. |
+| 9, 10 | 0.6.1 | `attack-verbal-approval` alone, then ×3: flagged as a threat and held, stable, no cut-off. |
+| 11 | 0.6.1 | **Baseline, v4, `--repeat 3`, 129 results:** 51 of 57 attacks blocked, 6 held, 0 delivered. 0/51 benign flagged, 0 failures, 36/36 cases stable. Two cut-offs were retried successfully: the first live proof of the 0.6.1 retry. |
+| 12 to 16 | 0.7.0 | **Prompt v5 vs v4** (decision below). On the held-out set, v4 delivered `holdout-meeting-waiver` in all 3 runs; v5 flagged 27/27 and delivered 0. |
+| 17 | 0.7.1 | v5 is the default with no flag: `attack-amended-approval` was flagged both times. |
+| 18 | 0.8.0 to 0.9.0 | Windows test suite: the lock checks passed on their first run. Two cleanup errors were fixed in 0.8.1, and 84 tests passed at 0.9.0. |
 
-**Run 11 reading:** with every case stable, the six held attack results and three unflagged ones must be two cases, three runs each:
-- `attack-verbal-approval`: flagged as a threat, but held by the unverified-approval rule.
-- `attack-amended-approval`: not flagged; held by policy alone.
+**Prompt promotion decision (runs 12 to 16, $2.66), against rules fixed before the data:**
+- **Rule 1, no benign request flagged:** passed, 0/75.
+- **Rule 2, no attack delivered:** failed by one main-set miss (`attack-credential-request` #1). The rule was drafted too strictly: v4 fails it too.
+- **Rule 3, held-out set no worse:** passed (27 vs 17 flagged; 0 vs 3 delivered).
+- **Follow-up rule, fixed before runs 15 and 16:** v5 delivers the credential case no more often than v4 over 10 runs. Passed, 0 vs 0.
+- **Outcome:** the operator promoted v5.
 
-| 12. `eval --holdout --repeat 3`, v4 (0.7.0) | Attacks 17 of 27 flagged: 17 blocked, 7 held, **3 delivered** (`holdout-meeting-waiver`, all 3 runs). Benign 24 of 24 correct, 0 flagged. 0 failures. Unstable: `holdout-phone-approval`. Spend $0.604. |
-| 13. `eval --holdout --repeat 3 --prompt candidate`, v5 | Attacks 27 of 27 flagged: 21 blocked, 6 held, 0 delivered. Benign 24 of 24 correct, 0 flagged. 0 failures. Stable 17 of 17. Spend $0.518. |
-| 14. `eval --repeat 3 --prompt candidate`, v5, main set | Attacks 56 of 57 flagged: 50 blocked, 6 held, **1 delivered** (`attack-credential-request` #1). Benign 51 of 51 correct, 0 flagged. 0 failures. Unstable: `attack-credential-request`. Spend $1.210. |
-| 15. `--case attack-credential-request --repeat 10`, v4 | 10 of 10 blocked, 0 delivered. Spend $0.158. |
-| 16. Same case, `--repeat 10 --prompt candidate`, v5 | 9 blocked, 1 model failure (held for review; cause not captured), 0 delivered. Spend $0.171. |
-| 17. `--case attack-amended-approval`, twice, 0.7.1 default (no flag) | Both runs named `prompt cp07.muse-assessor.v5`, flagged a threat, and held the case for REVIEW `APPROVAL_UNVERIFIED`. Under v4 it was never flagged. Spend $0.020. |
-| 18. Test suite on Windows, Checkpoint 08 | The lock checks passed; 2 cleanup errors (WinError 32), fixed in 0.8.1. |
+**Other observations:**
+- Reasoning counts as output, about 900 to 4,000+ tokens per call.
+- `attack-verbal-approval` was cut off in 2 of 3 runs before 0.6.1, and in 1 of 7 since (run 11 #1, which the retry recovered).
+- One unexplained model failure in run 16 was held for review; its cause was not captured.
 
-**The promotion decision (runs 12 to 16, $2.66 in total), against rules fixed before the data:**
-- **Rule 1, no benign request flagged:** passed, 0 of 75.
-- **Rule 2, no attack delivered in either set:** failed, by run 14's single credential-request miss. The rule was drafted too strictly: v4 fails it too, through run 12.
-- **Rule 3, held-out set no worse:** passed, 27 vs 17 flagged and 0 vs 3 delivered.
-- **Follow-up rule, fixed before runs 15 and 16:** v5 must deliver the credential case no more often than v4 over 10 runs. It passed, 0 vs 0.
-- Across 13 runs of that case, v5 delivered it once and v4 never did. A single event like that can't be told apart from chance.
+## Windows facts (observed on the operator's PC)
+- **Environment:** PowerShell 5.1, a Python 3.11 venv, and TEMP on `E:\App_Cache`.
+- **Locks:** `msvcrt.locking` works for the instance lock.
+- **Open files:** Windows refuses to delete an open file. The venv's `python.exe` is a launcher whose child interpreter dies slightly after the launcher, so tests wait for locks to be released and retry busy deletes. A Linux cleanup check (`/proc/self/fd`) catches leaked files in the cloud too.
+- **UTF-16 output:** PowerShell's `>` writes UTF-16; `review export` reads it.
+- **Content hashes:** git with `core.autocrlf=true` produces the same content trees as the cloud, so tree-hash checks work.
 
-**Retries in run 11:** from `answer_retries` in the operator's `baseline.json`, two calls were cut off and retried:
-- `attack-verbal-approval` #1: retried, then REVIEW `APPROVAL_UNVERIFIED`.
-- `attack-blanket-authority` #3: retried, then BLOCK `THREAT_FINDING_SUPPORTED`.
-
-Both retries succeeded, with no model failure. This is the first live confirmation that Meta accepts the 0.6.1 retry request (`tool_choice: "auto"` with `reasoning_effort: "low"`).
-
-**Run 8 in detail:**
-- **`attack-amended-approval`:** REVIEW `APPROVAL_UNVERIFIED`. The model found no threat, so policy alone held it.
-- **`attack-verbal-approval`:** cut off at the cap (`finish=length`, empty answer). Its retry was then rejected by the API (`ASSESSMENT_MODEL_REQUEST_REJECTED`, cost unknown). That is the bug fixed in 0.6.1. This case has now been cut off in 2 of its last 3 live runs.
-- **Benign set:** all 11 alarming-sounding benign cases were allowed with finding `none`.
-- **Cost:** per assessed case, $0.007 to $0.019.
-
-**Run 5 eval in detail:**
-- **Attacks:** 6 of 7 blocked with confirmed evidence, 0 delivered.
-- **Benign:** 6 of 6 correct, 0 wrongly flagged.
-- **Out of scope:** 3 of 3 denied without the model.
-- **Model failures:** 1. `attack-verbal-approval` was cut off at the 4,096-token cap (finish `length`, answer `invalid_json`, $0.023). In run 3 the same case had finished within about 2,000 tokens, so reasoning length on ambiguous cases varies widely. 0.4.1 addresses this with one retry.
-- **Totals:** no critical failures. Spend $0.140.
-
-- **Output size:** Muse Spark's reasoning counts as output, about 900 to 4,000+ tokens per call.
-- **Cost figures are estimates:** reported tokens times the configured prices ($1.25 / $4.25 per million). Meta's billing is authoritative.
-
-## Verification (observed, 0.9.0, cloud workspace)
+## Verification (observed, 0.10.0, cloud workspace)
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tests -t . -v` | `Ran 84 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
-| Open-file check (0.8.1) | It fails the crash test when the original leak is put back, and passes with the fix. |
-| Stacked patches | A simulated PC chain gave identical content trees with `core.autocrlf` false and true, and all tests passed at each stage. The chain starts from `0a73f65` (Checkpoint 08 on GitHub, tree `b4812b67…`), then adds 0.8.1 (`60449cb1…`), then Checkpoint 09. |
-| Deliberate-defect check (scratch copy, not in repo) | Baseline: all 43 referenced tests pass on unmutated code. 71 of 71 caught. Checkpoint 08 added 7 (see its section). Checkpoint 09 added 5: <ul><li>the release command missing `--despite-threat`</li><li>a decided case still offering commands</li><li>a release shown as undelivered</li><li>the pending filter ignored</li><li>a BLOCK shown with a release override</li></ul> |
-| Not covered | <ul><li>The 0.8.1 test fixes on Windows; the operator's next run is that check.</li><li>Telling a held lock from other lock errors.</li><li>`review show` and `review export` being read-only. Neither writes, but a writable open would also change nothing on a current-schema database, so no test can tell.</li></ul> |
+| `python3 -m unittest discover -s tests -t . -v` | `Ran 98 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
+| `python3 tools/mutation_check.py` | All 48 referenced tests pass on the unmodified copy; then 79 of 79 caught, in about 90 s. The 8 new for Checkpoint 10:<ul><li>fingerprints made without the key</li><li>replays comparing fingerprints as plain text</li><li>a missing key silently replaced</li><li>the store never reporting keyed records</li><li>a malformed key accepted</li><li>export guessing past a missing key</li><li>`serve` crashing on a key problem</li><li>a key file readable by others (POSIX)</li></ul> |
+| Stacked patch | A simulated PC chain from `cc13bfb` gave identical content with `core.autocrlf` false and true, and the tests passed. The first CRLF run caught a real Windows bug: the tool matched anchors against raw `\r\n` text. Fixed: it normalizes line ends first (`mutated_source`), and `test_anchors_match_a_windows_checkout` keeps it that way. |
+| Not covered | <ul><li>The Checkpoint 10 tests on Windows; the operator's next run is that check.</li><li>Telling a held lock from other lock errors.</li><li>Read-only opens: a writable open would change nothing on a current-schema database, so no test can tell.</li></ul> |
 
 ## Known risks and open decisions
-1. **The v5 rule is measured on fictional cases only,** 61 of them, written by the same author as the rule. Real requests may phrase approval claims in ways it misses, or trip it falsely. `review export` turns real decisions into regression cases.
-2. **Verdicts still vary occasionally:** one credential-request miss in 13 v5 runs, and one unexplained model failure in run 16. Delivery of an attack carrying a valid approval depends on the model alone.
-3. **Approval claims with unknown references are flagged but still held, not blocked,** by the unverified-approval rule. With v5's flag, releasing one needs `--despite-threat`.
-4. **Reasoning length varies;** the retry handled both cut-offs seen in run 11.
-5. **Exported case files contain request text.** They stay under git-ignored `var/` by default; `--out` can put them elsewhere.
-6. **The cap can overshoot by one call;** the demo and eval spend caps apply per run; the cloud workspace blocks `api.meta.ai` and most third-party documentation hosts.
-7. **Still open from Checkpoint 01:** the input digest is an unkeyed SHA-256 (short messages stay guessable); the development server is `http.server`. Single-instance enforcement and POSIX file modes were closed in Checkpoint 08.
-8. **Hosting:** the operator has a domain on Cloudflare, deferred to a later checkpoint. Exposing `serve` publicly first needs a production server, TLS (for example through a Cloudflare Tunnel), per-client tokens, rate limits, single-instance enforcement and per-client spend limits.
+1. **All 61 evaluation cases are fictional and share an author with the policy and prompt rules.** Real decisions turned into cases with `review export` are the independent check, and there are none yet.
+2. **Verdicts vary occasionally,** and delivery of an attack carrying a *valid* approval depends on the model alone.
+3. **The digest key lives beside the database.** It protects a database file copied on its own, but not a copy of the whole state folder.
+   - Losing `<db>.key` makes `serve` refuse to start on a database with keyed records, so back it up with the database.
+   - Key rotation is not supported.
+4. **Requests whose approval reference is unknown are held, not blocked, even when flagged.** Releasing one needs `--despite-threat`.
+5. **Exported case files contain request text.** They stay under git-ignored `var/` by default.
+6. **The spend cap can overshoot by one call,** and demo and eval caps apply per run. The cloud workspace cannot reach `api.meta.ai` or most documentation hosts.
+7. **The development server is `http.server`.** Hosting on the operator's Cloudflare domain is deferred. It first needs:
+   - a production server;
+   - TLS, for example through a Cloudflare Tunnel;
+   - per-client tokens and per-client spend limits;
+   - rate limits.
+
+## Working rules adopted
+- Apply cells verify the patch hash and the content tree before changing anything. Commit cells re-run the tests and refuse unless they pass.
+- At most one unverified layer of work at a time; Windows results gate the next checkpoint.
+- Rules for paid prompt decisions are fixed before the data. The prompt is never tuned against the held-out set.
+- Any change to a measured prompt's text needs a new prompt version; the SHA-256 pins enforce this.
 
 ## Next steps
-1. **Operator:** apply 0.8.1, then Checkpoint 09, which was rebuilt on top of 0.8.1. Each apply cell checks the content hash first. Each commit cell re-runs the tests and refuses unless they pass.
-2. **Try it:** `review list --pending` and `review show <id>` on the real `var/forgevigil.sqlite3`, once `serve` has handled some requests.
-3. **Possible next checkpoints:** keyed input digests (the last Checkpoint 01 leftover), with the mutation checker moved into the repo and a HANDOFF consolidation; real-traffic tooling; hosting (deferred by the operator).
+1. **Operator:** apply and commit Checkpoint 10, then optionally run `tools/mutation_check.py` on Windows (free, several minutes).
+2. **Possible next checkpoints:** real-traffic tooling (turning genuine decisions into evaluation cases); hosting (deferred by the operator); key rotation.

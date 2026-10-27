@@ -7,12 +7,10 @@ field (actor, policy, assessment, ...) is rejected rather than ignored.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from dataclasses import dataclass
 
-from .versions import REQUEST_SCHEMA_VERSION
 
 MAX_BODY_BYTES = 16 * 1024
 MAX_MESSAGE_CHARS = 2000
@@ -116,21 +114,3 @@ def _utf8_encodable(text: str) -> bool:
         return False
     return True
 
-
-def input_digest(actor_id: str, request: SubmittedRequest) -> str:
-    """Digest of the normalized payload, stored instead of the raw message.
-
-    Key order, JSON whitespace and an absent-versus-null approval_ref do not
-    change it. It is an unkeyed SHA-256, so short messages remain guessable.
-    """
-    normalized = {
-        "schema": REQUEST_SCHEMA_VERSION,
-        "actor_id": actor_id,
-        "request_id": request.request_id,
-        "document_id": request.document_id,
-        "recipient_id": request.recipient_id,
-        "approval_ref": request.approval_ref,
-        "message": request.message,
-    }
-    canonical = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()

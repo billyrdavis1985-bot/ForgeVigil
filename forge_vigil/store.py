@@ -387,6 +387,10 @@ class Store:
             ).fetchone()
         return json.loads(row[0]) if row else None
 
+    def has_keyed_digests(self) -> bool:
+        with self._reader() as conn:
+            return conn.execute("SELECT 1 FROM requests WHERE input_digest LIKE 'hmac-sha256:%' LIMIT 1").fetchone() is not None
+
     def get_review(self, actor_id: str, request_id: str) -> dict | None:
         with self._reader() as conn:
             row = conn.execute(

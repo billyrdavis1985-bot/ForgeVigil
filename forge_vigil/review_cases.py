@@ -19,7 +19,8 @@ import os
 from pathlib import Path
 
 from .evaluation import MAX_CASE_ID_CHARS, load_case_set
-from .schema import RequestValidationError, input_digest, parse_request
+from .digests import DigestKeyError, digest_matches, is_keyed, key_path_for, load_key
+from .schema import RequestValidationError, parse_request
 from .store import Store
 from .versions import CODE_VERSION
 
@@ -88,6 +89,15 @@ def export_case(
         raise ExportError("label_conflict", f"a {decision} decision means {derived}, not {label}")
     label = label or derived
 
+    key = None
+    if is_keyed(receipt["input_digest"]):
+        try:
+            key = load_key(store.path)
+        except DigestKeyError as exc:
+            raise ExportError("digest_key_unreadable", str(exc)) from None
+        if key is None:
+            raise ExportError("digest_key_missing", f"this request was fingerprinted with {key_path_for(store.path)}, "
+                                                    "which is missing, so its message cannot be checked")
     message = None
     for candidate in _message_candidates(message_text):
         payload = {
@@ -101,7 +111,7 @@ def export_case(
             request = parse_request(json.dumps(payload).encode("utf-8"))
         except RequestValidationError:
             continue
-        if input_digest(actor_id, request) == receipt["input_digest"]:
+        if digest_matches(receipt["input_digest"], key, actor_id, request):
             message = candidate
             break
     if message is None:

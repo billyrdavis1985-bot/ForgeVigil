@@ -35,4 +35,5 @@ Operator instructions take precedence over this file.
 ## Commands
 - Tests: `python3 -m unittest discover -s tests -t . -v`
 - Smoke demo: `python3 -m forge_vigil demo`
+- Deliberate-defect check (several minutes): `python3 tools/mutation_check.py`; it must report every mutant caught.
 - Stack: Python 3 standard library and `unittest`. Add no dependencies without operator approval.

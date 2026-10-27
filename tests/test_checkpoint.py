@@ -225,7 +225,7 @@ class DecisionTests(_TempStateTest):
 
         self.assertEqual((receipt["request_id"], receipt["actor_id"]), ("req-0001", "operator"))
         self.assertTrue(receipt["received_at"].endswith("Z") and receipt["completed_at"].endswith("Z"))
-        self.assertRegex(receipt["input_digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(receipt["input_digest"], r"^hmac-sha256:[0-9a-f]{64}$")  # keyed since 0.10.0
         self.assertRegex(receipt["policy_digest"], r"^sha256:[0-9a-f]{64}$")
         self.assertEqual(
             receipt["assessment"],

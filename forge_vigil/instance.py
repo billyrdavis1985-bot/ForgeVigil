@@ -78,13 +78,14 @@ class InstanceLock:
 
 
 def secure_state_files(db_path: Path) -> None:
-    """POSIX: create the database owner-only, or tighten an existing one and its -wal and -shm files."""
+    """POSIX: create the database owner-only, or tighten an existing one, its -wal and -shm files and its key."""
     if os.name != "posix":
         return
     db_path = Path(db_path)
     if not db_path.exists():
         os.close(os.open(db_path, os.O_RDWR | os.O_CREAT, 0o600))  # SQLite treats an empty file as new
-    for path in (db_path, db_path.with_name(db_path.name + "-wal"), db_path.with_name(db_path.name + "-shm")):
+    for suffix in ("", "-wal", "-shm", ".key"):
+        path = db_path.with_name(db_path.name + suffix)
         if path.exists():
             os.chmod(path, 0o600)
 

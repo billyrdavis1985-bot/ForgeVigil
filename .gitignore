@@ -9,6 +9,7 @@ var/
 *.sqlite3-wal
 *.sqlite3-shm
 *.sqlite3.lock
+*.sqlite3.key
 *.db
 
 # Secrets and local configuration

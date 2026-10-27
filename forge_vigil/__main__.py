@@ -288,6 +288,7 @@ def _eval(
 def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
     from .assessment import fixed_clean_assessor
     from .fixtures import OPERATOR_ACTOR_ID, default_fixtures
+    from .digests import DigestKeyError
     from .http_api import BIND_HOST, TOKEN_ENV_VAR, ConfigError, ForgeVigilHTTPServer, token_from_env
     from .instance import InstanceLock, InstanceLockError, secure_state_files
     from .service import ForgeVigilService
@@ -329,7 +330,11 @@ def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
 
             assessor = MuseAssessor(live_config, store, fixtures)
             mode = f"LIVE assessor {assessor.adapter_id}; spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
-        service = ForgeVigilService(store, assessor, fixtures=fixtures)
+        try:
+            service = ForgeVigilService(store, assessor, fixtures=fixtures)
+        except DigestKeyError as exc:
+            print(f"refusing to start: {exc}", file=sys.stderr)
+            return 2
         if service.recovered:
             print(f"held {len(service.recovered)} incomplete request(s) for REVIEW after restart")
         server = ForgeVigilHTTPServer(service, {token: OPERATOR_ACTOR_ID}, port=port)

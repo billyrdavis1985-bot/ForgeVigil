@@ -29,7 +29,8 @@ from .assessment import (
 )
 from .evidence import check_evidence
 from .fixtures import FixtureSet, default_fixtures
-from .schema import SubmittedRequest, input_digest
+from .digests import digest_matches, keyed_digest, load_or_create_key
+from .schema import SubmittedRequest
 from .store import AttemptNotCurrent, Claim, ExistingRequest, OutboxItem, Store
 from .versions import (
     ASSESSMENT_SCHEMA_VERSION,
@@ -107,11 +108,18 @@ def build_outbox_item(
 
 
 class ForgeVigilService:
-    def __init__(self, store: Store, assessor: Assessor, fixtures: FixtureSet | None = None) -> None:
+    def __init__(
+        self, store: Store, assessor: Assessor, fixtures: FixtureSet | None = None, *, digest_key: bytes | None = None
+    ) -> None:
+        """`digest_key` defaults to the key file beside the database, created on first use (digests.py).
+        It is loaded before anything is written, so a missing key refuses startup with nothing changed."""
         self.store = store
         self.assessor = assessor
         self.fixtures = fixtures if fixtures is not None else default_fixtures()
         self.policy_digest = policy.policy_digest(self.fixtures)
+        self._digest_key = digest_key if digest_key is not None else load_or_create_key(
+            store.path, has_keyed_digests=store.has_keyed_digests()
+        )
         # Starting an instance resolves what a previous process left unfinished:
         # in-flight spend reservations become "unknown" (still counted against
         # the cap) and incomplete requests are held for REVIEW. Nothing is
@@ -136,7 +144,7 @@ class ForgeVigilService:
 
     def submit(self, actor_id: str, request: SubmittedRequest) -> Outcome:
         """Process one request for an already-authenticated actor."""
-        digest = input_digest(actor_id, request)
+        digest = keyed_digest(self._digest_key, actor_id, request)
         try:
             claimed = self.store.claim(
                 actor_id=actor_id,
@@ -151,11 +159,12 @@ class ForgeVigilService:
         except Exception:
             return Outcome(UNAVAILABLE)  # no durable intent, so no assessment and no delivery
         if isinstance(claimed, ExistingRequest):
-            return self._existing(claimed, digest)
+            return self._existing(claimed, actor_id, request)
         return self._process(claimed, request)
 
-    def _existing(self, existing: ExistingRequest, digest: str) -> Outcome:
-        if existing.input_digest != digest:
+    def _existing(self, existing: ExistingRequest, actor_id: str, request: SubmittedRequest) -> Outcome:
+        # The stored digest names its scheme, so a request recorded before 0.10.0 still replays.
+        if not digest_matches(existing.input_digest, self._digest_key, actor_id, request):
             return Outcome(CONFLICT)
         if existing.state == "completed" and existing.receipt is not None:
             return Outcome(REPLAYED, existing.receipt, existing.review)
