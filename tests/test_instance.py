@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.client
 import os
+import shutil
 import socket
 import sqlite3
 import stat
@@ -31,6 +32,57 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
+def wait_until_free(db_path: Path, seconds: float = 10) -> None:
+    """Return once the lock can be taken (it is released again at once); fail if it stays held.
+
+    On Windows a venv's python.exe is a launcher that runs the real interpreter as a child, and killing the
+    launcher ends that child a moment later. So a lock can outlive the process the test killed, briefly."""
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            with InstanceLock(db_path):
+                return
+        except InstanceLockError:
+            if time.monotonic() > deadline:
+                raise AssertionError(f"lock still held {seconds:.0f} s after its process ended") from None
+            time.sleep(0.1)
+
+
+def remove_tree(path: Path, seconds: float = 10) -> None:
+    """Windows can keep a just-closed file busy for a moment (a dying child process, or a virus scanner
+    opening the new file), so deletion is retried briefly. A file that stays open still fails the test."""
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.2)
+
+
+def files_held_open_under(path: Path) -> list[str]:
+    """Files under `path` this process still has open (Linux only; elsewhere an empty list).
+
+    Windows refuses to delete an open file and Linux does not, so a leaked handle only shows up on
+    Windows. Checking /proc/self/fd catches the same mistake here."""
+    fd_dir = Path("/proc/self/fd")
+    if not fd_dir.is_dir():
+        return []
+    root, held = str(path.resolve()), []
+    for entry in fd_dir.iterdir():
+        try:
+            target = os.readlink(entry)
+        except OSError:
+            continue
+        if target.startswith(root + os.sep):
+            held.append(target)
+    return held
+
+
 def healthy(port: int) -> bool:
     try:
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
@@ -45,9 +97,9 @@ def healthy(port: int) -> bool:
 
 class InstanceLockTests(unittest.TestCase):
     def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory(prefix="forgevigil-instance-")
-        self.addCleanup(tmp.cleanup)
-        self.tmp = Path(tmp.name)
+        self.tmp = Path(tempfile.mkdtemp(prefix="forgevigil-instance-"))
+        self.addCleanup(remove_tree, self.tmp)  # registered first, so it runs after every server is stopped
+        self.addCleanup(lambda: self.assertEqual(files_held_open_under(self.tmp), [], "a test left a file open"))
         self.db_path = self.tmp / "state.sqlite3"
 
     def serve(self, port: int) -> subprocess.Popen:
@@ -72,6 +124,7 @@ class InstanceLockTests(unittest.TestCase):
             proc.kill()  # the hardest way a server can end: no cleanup code runs
         proc.wait(timeout=20)
         proc.stderr.close()
+        wait_until_free(self.db_path)  # the server is only really gone once its lock is free
 
     def test_a_second_lock_on_the_same_database_is_refused(self):
         first = InstanceLock(self.db_path)
@@ -101,15 +154,7 @@ class InstanceLockTests(unittest.TestCase):
         holder.kill()
         holder.wait(timeout=20)
         holder.stdout.close()
-        deadline = time.monotonic() + 10  # Windows can take a moment to drop a dead process's locks
-        while True:
-            try:
-                InstanceLock(self.db_path).acquire()
-                break
-            except InstanceLockError:
-                if time.monotonic() > deadline:
-                    raise
-                time.sleep(0.1)
+        wait_until_free(self.db_path)  # takes and releases the lock, so nothing is left open
 
     def test_serve_refuses_a_database_another_process_holds_and_touches_nothing(self):
         with InstanceLock(self.db_path):

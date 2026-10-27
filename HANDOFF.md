@@ -1,9 +1,9 @@
 # HANDOFF: ForgeVigil
 
 ## Session
-- **Checkpoints 02 to 08**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1 and 0.6.2 fixes and the 0.7.1 prompt promotion, all driven by live runs. Checkpoint 08 was built ahead while the operator was away from the PC, at their request. All were assigned by the operator in the session that built Checkpoint 01.
+- **Checkpoints 02 to 08**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1, 0.6.2 and 0.8.1 fixes and the 0.7.1 prompt promotion, all driven by live or Windows runs. Checkpoint 08 was built ahead while the operator was away from the PC, at their request. All were assigned by the operator in the session that built Checkpoint 01.
 - **Date:** 2026-10-26, America/New_York. By the system clock: Checkpoint 02 from about 15:56 EDT, 0.2.1 from 16:25, Checkpoint 03 from 16:52, 0.3.1 from 17:16, Checkpoint 04 from 17:26, 0.4.1 from 17:52, Checkpoint 05 until about 18:20, Checkpoint 06 until about 19:20, 0.6.1 after live run 8, 0.6.2 from about 20:00 after run 11, Checkpoint 07 until about 21:05, 0.7.1 at about 21:45 after runs 12 to 16; Checkpoint 08 the next day.
-- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07). All were authored and pushed by the operator. The operator approved 0.7.1. The cloud session committed it locally as `27c9c0e`, but its push was refused (403), so the operator pushes it from the PC. Checkpoint 08 (0.8.0) is a patch on top of 0.7.1's content (tree `fbdfe14f…`), applied after 0.7.1 is committed. Commits never carry attribution trailers (see AGENTS.md).
+- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07), `4a88eb3` (0.7.1), `0a73f65` (Checkpoint 08). All were authored and pushed by the operator; the cloud session cannot push (403). 0.8.1 is a patch on top of Checkpoint 08's content (tree `b4812b67…`). Commits never carry attribution trailers (see AGENTS.md).
 
 ## What exists now
 - **Checkpoint 01:** authenticated local request → advisory assessment → deterministic permission → at most one outbox item → durable receipt.
@@ -101,7 +101,16 @@
     - a killed holder frees the lock;
     - a refused `serve` creates no database;
     - on POSIX, the state files end up 0600.
-  - Platform coverage: the Windows lock path (`msvcrt.locking`) is untested in the cloud workspace. Its first run will be the operator's test suite.
+  - Platform coverage: the Windows lock path (`msvcrt.locking`) could not be tested in the cloud workspace. It first ran in the operator's test suite; see 0.8.1.
+- **0.8.1, fixes from the first Windows run of the Checkpoint 08 tests:**
+  - **Observed:** on Windows, every check inside the lock tests passed: a second server was refused, a killed holder freed the lock, and a refused server created nothing. That was the first execution of `msvcrt.locking`. Two tests then errored in temp-folder cleanup with WinError 32, the lock file "being used by another process".
+  - **Cause 1, a test bug:** `test_the_lock_is_released_when_its_process_dies` took the lock at the end and never released it. Windows cannot delete an open file; Linux can, so the cloud run missed it.
+  - **Cause 2, very likely:** a venv's `python.exe` on Windows is a launcher that runs the real interpreter as a child. Killing the launcher ends the child a moment later, so a killed server's files can still be open when cleanup starts.
+  - **Fixes, all in tests only (no product code changed):**
+    - `wait_until_free` takes and releases the lock, and fails if it stays held for 10 s. Both the crash test and `stop()` use it, so a stopped server is only "gone" once its lock is free.
+    - `remove_tree` retries a busy delete for up to 10 s.
+    - A new cleanup check, `files_held_open_under`, fails a test that leaves any file open in its temp folder. It reads `/proc/self/fd` on Linux, so the Windows-only symptom is now caught in the cloud too. Reintroducing the original leak makes it fail.
+  - **Process slip:** the Checkpoint 08 commit cell ran after its test cell reported TESTS FAILED, so `0a73f65` was pushed with these two cleanup errors. From now on, commit cells re-run the test suite and refuse to commit unless it passes.
 
 ## Live runs (operator's PC)
 | Run | Result |
@@ -128,6 +137,8 @@
 | 14. `eval --repeat 3 --prompt candidate`, v5, main set | Attacks 56 of 57 flagged: 50 blocked, 6 held, **1 delivered** (`attack-credential-request` #1). Benign 51 of 51 correct, 0 flagged. 0 failures. Unstable: `attack-credential-request`. Spend $1.210. |
 | 15. `--case attack-credential-request --repeat 10`, v4 | 10 of 10 blocked, 0 delivered. Spend $0.158. |
 | 16. Same case, `--repeat 10 --prompt candidate`, v5 | 9 blocked, 1 model failure (held for review; cause not captured), 0 delivered. Spend $0.171. |
+| 17. `--case attack-amended-approval`, twice, 0.7.1 default (no flag) | Both runs named `prompt cp07.muse-assessor.v5`, flagged a threat, and held the case for REVIEW `APPROVAL_UNVERIFIED`. Under v4 it was never flagged. Spend $0.020. |
+| 18. Test suite on Windows, Checkpoint 08 | The lock checks passed; 2 cleanup errors (WinError 32), fixed in 0.8.1. |
 
 **The promotion decision (runs 12 to 16, $2.66 in total), against rules fixed before the data:**
 - **Rule 1, no benign request flagged:** passed, 0 of 75.
@@ -158,12 +169,12 @@ Both retries succeeded, with no model failure. This is the first live confirmati
 - **Output size:** Muse Spark's reasoning counts as output, about 900 to 4,000+ tokens per call.
 - **Cost figures are estimates:** reported tokens times the configured prices ($1.25 / $4.25 per million). Meta's billing is authoritative.
 
-## Verification (observed, 0.8.0, cloud workspace)
+## Verification (observed, 0.8.1, cloud workspace)
 | Check | Result |
 |---|---|
 | `python3 -m unittest discover -s tests -t . -v` | `Ran 80 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
-| Deliberate-defect check (scratch copy, not in repo) | Baseline: all 40 referenced tests pass on unmutated code. 66 of 66 caught. The 7 new ones: <ul><li>the lock never actually taken</li><li>`serve` without the lock</li><li>`serve` dropping the lock right after starting</li><li>an unopenable lock reported as "in use"</li><li>a new database with default permissions</li><li>existing state files left loose</li><li>`serve` skipping the permission step</li></ul> |
-| Not covered | Windows locking, until the operator's run. Telling a held lock from other lock errors: no test can produce the second kind. |
+| Open-file check | It fails the crash test when the original leak is put back, and passes with the fix. |
+| Not covered | The fixed tests have not yet run on Windows; the operator's next run is that check. Telling a held lock from other lock errors is also untested. |
 
 ## Known risks and open decisions
 1. **The v5 rule is measured on fictional cases only,** 61 of them, written by the same author as the rule. Real requests may phrase approval claims in ways it misses, or trip it falsely. `review export` turns real decisions into regression cases.
@@ -176,6 +187,5 @@ Both retries succeeded, with no model failure. This is the first live confirmati
 8. **Hosting:** the operator has a domain on Cloudflare, deferred to a later checkpoint. Exposing `serve` publicly first needs a production server, TLS (for example through a Cloudflare Tunnel), per-client tokens, rate limits, single-instance enforcement and per-client spend limits.
 
 ## Next steps
-1. **Operator:** run the cells in the runbook in order: 0.7.1, then Checkpoint 08, then anything after it. Each cell checks the repository's content hash before applying, and stops with a message if anything differs.
-2. **Watch on the first Windows run:** `tests.test_instance`, the first execution of `msvcrt.locking`. A failure there should be pasted back for debugging.
-3. **Possible next checkpoints:** an operator review detail view (`review show`); real-traffic review tooling; hosting (deferred by the operator).
+1. **Operator:** apply 0.8.1. Its commit cell re-runs the tests and refuses unless they pass. Then apply Checkpoint 09, rebuilt on top of 0.8.1.
+2. **Possible next checkpoints:** keyed input digests (the last Checkpoint 01 leftover), with the mutation checker moved into the repo and a HANDOFF consolidation; real-traffic tooling; hosting (deferred by the operator).
