@@ -1,4 +1,4 @@
-"""Command line: `python3 -m forge_vigil serve`, `demo`, `eval`, `review` or `report`.
+"""Command line: `python3 -m forge_vigil serve`, `submit`, `demo`, `eval`, `review` or `report`.
 
 serve, demo and eval default to the fixture assessor. `--assessor muse` uses the live Meta
 Model API and needs MODEL_API_KEY and FORGEVIGIL_SPEND_CAP_USD in the environment.
@@ -20,6 +20,18 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="SQLite state file")
     serve.add_argument("--port", type=int, default=8787)
     serve.add_argument("--assessor", choices=ASSESSORS, default="fixture")
+    submit = commands.add_parser("submit", help="send one request to the local server and print the outcome")
+    submit.add_argument("--document", required=True, help="document id, for example public-spec")
+    submit.add_argument("--recipient", required=True, help="recipient id, for example supplier")
+    submit.add_argument("--approval", help="approval reference, if there is one")
+    text = submit.add_mutually_exclusive_group(required=True)
+    text.add_argument("--message", help="the message, as text")
+    text.add_argument("--message-file", type=Path, help="a UTF-8 or UTF-16 file holding the message")
+    submit.add_argument("--request-id", help="default: a new unique id")
+    submit.add_argument("--port", type=int, default=8787, help="the port `serve` listens on (127.0.0.1 only)")
+    submit.add_argument("--journal", type=Path, default=Path("var/sent.jsonl"),
+                        help="where to keep the requester's copy of recorded requests")
+    submit.add_argument("--no-journal", action="store_true", help="keep no copy of the message")
     demo = commands.add_parser("demo", help="three-case smoke demonstration on temporary state")
     demo.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     demo.add_argument("--review", action="store_true", help="finish by releasing the REVIEW case as the operator")
@@ -49,12 +61,17 @@ def main(argv: list[str] | None = None) -> int:
             decide.add_argument("--despite-threat", action="store_true",
                                 help="release even though the model flagged a threat")
     export = actions.add_parser("export", parents=[common],
-                                help="save a decided case, with its original message, as a labelled evaluation case")
-    export.add_argument("request_id")
-    export.add_argument("--message-file", type=Path, required=True,
+                                help="save decided cases, with their original messages, as labelled evaluation cases")
+    export.add_argument("request_id", nargs="?", help="one request to export (or use --all)")
+    export.add_argument("--all", action="store_true", help="every decided request found in the journal")
+    source = export.add_mutually_exclusive_group()
+    source.add_argument("--message-file", type=Path,
                         help="text file holding the request's original message (checked against its digest)")
+    source.add_argument("--from-journal", action="store_true", help="take the message from the journal")
+    export.add_argument("--journal", type=Path, default=Path("var/sent.jsonl"),
+                        help="the requester's journal that `submit` keeps")
     export.add_argument("--label", choices=("benign", "attack"), help="needed for a rejected case")
-    export.add_argument("--out", type=Path, default=Path("var/review_cases.json"), help="case file to add it to")
+    export.add_argument("--out", type=Path, default=Path("var/review_cases.json"), help="case file to add to")
     evaluate = commands.add_parser("eval", help="run the labelled evaluation cases on temporary state")
     evaluate.add_argument("--assessor", choices=ASSESSORS, default="fixture")
     evaluate.add_argument("--json", type=Path, help="also write full results (receipts included) to this file")
@@ -70,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
                           help="live assessor prompt: the current default, or the one it replaced (for comparison)")
     args = parser.parse_args(argv)
 
+    if args.command == "submit":
+        return _submit(args)
     if args.command == "demo":
         return _demo(args.assessor, args.review)
     if args.command == "eval":
@@ -207,19 +226,82 @@ def _show_case(args) -> int:
     return 0
 
 
+def _submit(args) -> int:
+    from .client import SubmitError, build_payload, describe, new_request_id, submit
+    from .http_api import ConfigError, token_from_env
+    from .review_cases import read_message_file
+    from .service import utc_now
+
+    if not 1 <= args.port <= 65535:
+        print("refusing to run: --port must be 1-65535", file=sys.stderr)
+        return 2
+    try:
+        token = token_from_env()
+    except ConfigError as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    message = args.message
+    if args.message_file is not None:
+        try:
+            message = read_message_file(args.message_file)
+        except (OSError, UnicodeDecodeError):
+            print(f"refusing to run: cannot read {args.message_file} as UTF-8 or UTF-16 text", file=sys.stderr)
+            return 2
+    request_id = args.request_id or new_request_id()
+    journal = None if args.no_journal else args.journal
+    try:
+        payload = build_payload(request_id=request_id, document_id=args.document, recipient_id=args.recipient,
+                                approval_ref=args.approval, message=message)
+        result = submit(args.port, token, payload, journal, submitted_at=utc_now())
+    except SubmitError as exc:
+        print(f"refusing to run ({exc.code}): {exc.detail}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"recorded by the server, but the journal could not be written ({exc.strerror or exc})", file=sys.stderr)
+        return 1
+    print(describe(result, request_id, journal))
+    return 0 if result["recorded"] else 1
+
+
 def _export_case(args) -> int:
     import sqlite3
 
+    from .client import read_journal
     from .fixtures import OPERATOR_ACTOR_ID
     from .review_cases import ExportError, export_case, read_message_file
     from .service import utc_now
     from .store import Store
 
-    try:
-        message_text = read_message_file(args.message_file)
-    except (OSError, UnicodeDecodeError):
-        print(f"refusing to run: cannot read {args.message_file} as UTF-8 or UTF-16 text", file=sys.stderr)
+    if args.all == (args.request_id is not None):
+        print("refusing to run: give one request id, or --all", file=sys.stderr)
         return 2
+    if args.all and (args.message_file or args.label):
+        print("refusing to run: --all takes every message from the journal and no --label", file=sys.stderr)
+        return 2
+    if args.request_id is not None and not (args.message_file or args.from_journal):
+        print("refusing to run: give --message-file FILE or --from-journal", file=sys.stderr)
+        return 2
+    if args.all or args.from_journal:
+        try:
+            journal, unreadable = read_journal(args.journal)
+        except OSError as exc:
+            print(f"refusing to run: cannot read {args.journal} ({exc.strerror or exc})", file=sys.stderr)
+            return 2
+        if unreadable:
+            print(f"note: {unreadable} line(s) of {args.journal} could not be read and were skipped", file=sys.stderr)
+    if args.all:
+        return _export_all(args, journal)
+    if args.from_journal:
+        if args.request_id not in journal:
+            print(f"refused (not_in_journal): {args.journal} has no request {args.request_id!r}", file=sys.stderr)
+            return 1
+        message_text = journal[args.request_id]["message"]
+    else:
+        try:
+            message_text = read_message_file(args.message_file)
+        except (OSError, UnicodeDecodeError):
+            print(f"refusing to run: cannot read {args.message_file} as UTF-8 or UTF-16 text", file=sys.stderr)
+            return 2
     try:
         case = export_case(
             Store(args.db, read_only=True),
@@ -242,6 +324,47 @@ def _export_case(args) -> int:
     print(f"exported {case['id']} as {case['label']} (expected: {'/'.join(case['expect'])}) to {args.out}")
     print(f"run the exported cases with: python -m forge_vigil eval --cases {args.out}")
     return 0
+
+
+_GROUP_TEXT = {
+    "exported": "exported",
+    "pending": "skipped, no operator decision yet",
+    "final": "skipped, ALLOW or DENY (no decision to label them with)",
+    "label_required": "skipped, rejected: export each alone with --label",
+    "already_exported": "skipped, already exported",
+    "not_found": "skipped, not in this database",
+    "message_mismatch": "PROBLEM: the journal's text does not match the stored fingerprint",
+    "failed": "PROBLEM: could not be exported",
+}
+
+
+def _export_all(args, journal: dict) -> int:
+    import sqlite3
+
+    from .fixtures import OPERATOR_ACTOR_ID
+    from .review_cases import export_all
+    from .service import utc_now
+    from .store import Store
+
+    if not journal:
+        print(f"nothing to export: {args.journal} has no journaled requests")
+        return 0
+    try:
+        groups = export_all(Store(args.db, read_only=True), actor_id=OPERATOR_ACTOR_ID, journal=journal,
+                            cases_path=args.out, exported_at=utc_now())
+    except (RuntimeError, sqlite3.Error) as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"failed: could not write {args.out} ({exc.strerror})", file=sys.stderr)
+        return 1
+    print(f"{len(journal)} journaled request(s) from {args.journal}:")
+    for group, ids in groups.items():
+        if ids:
+            print(f"  {len(ids)} {_GROUP_TEXT[group]}: {', '.join(ids)}")
+    if groups["exported"]:
+        print(f"run the exported cases with: python -m forge_vigil eval --cases {args.out}")
+    return 1 if groups["message_mismatch"] or groups["failed"] else 0
 
 
 def _eval(

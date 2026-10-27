@@ -119,11 +119,14 @@ class InstanceLockTests(unittest.TestCase):
             time.sleep(0.1)
         self.fail("server did not become healthy")
 
-    def stop(self, proc: subprocess.Popen) -> None:
+    def reap(self, proc: subprocess.Popen) -> None:
         if proc.poll() is None:
             proc.kill()  # the hardest way a server can end: no cleanup code runs
         proc.wait(timeout=20)
         proc.stderr.close()
+
+    def stop(self, proc: subprocess.Popen) -> None:
+        self.reap(proc)
         wait_until_free(self.db_path)  # the server is only really gone once its lock is free
 
     def test_a_second_lock_on_the_same_database_is_refused(self):
@@ -174,6 +177,7 @@ class InstanceLockTests(unittest.TestCase):
         self.wait_healthy(first, first_port)
 
         second = self.serve(second_port)
+        self.addCleanup(self.reap, second)  # a second server that wrongly kept running must not outlive the test
         _, err = second.communicate(timeout=30)
         self.assertEqual(second.returncode, 2, err)
         self.assertIn("another ForgeVigil server is already using", err)

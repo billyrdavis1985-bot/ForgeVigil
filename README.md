@@ -63,6 +63,10 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 10:** keyed request fingerprints, so a copy of the database alone can't confirm a guessed
   message. Records from before 0.10.0 still replay. The deliberate-defect check now lives in the repo as
   `tools/mutation_check.py`, kept honest by a fast test.
+- **Checkpoint 11:** tooling for real traffic. `submit` sends a request to the local server and keeps the
+  requester's copy of the message in a local journal, because the server stores none. `review export --all`
+  then turns each operator decision on those requests into a labelled evaluation case, checked against its
+  stored fingerprint.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -73,7 +77,7 @@ Not established yet:
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 98 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 104 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -247,7 +251,8 @@ deliver that case no more often than the old one over 10 runs. Both delivered it
 - **Labels:** `false-positive` and `release` mean benign, and `confirm` means attack. A `reject` doesn't
   say which, so it needs `--label benign` or `--label attack`.
 - **Message text:** the database holds only a digest of each message, so you supply the original text in
-  a file. It's accepted only if it reproduces the recorded digest exactly. Records made since 0.10.0 need
+  a file, or take it from the journal that `submit` keeps (`--from-journal`, or `--all`; see
+  [Real traffic](#real-traffic-checkpoint-11)). It's accepted only if it reproduces the recorded digest exactly. Records made since 0.10.0 need
   the database's key file for that check. UTF-8 and UTF-16 files, and
   Windows line endings, are fine.
 - **Storage:** cases go to `var/review_cases.json`, which git ignores because it contains request text.
@@ -311,6 +316,48 @@ The report shows counts and codes only. Request text is never stored, so it cann
 All figures come from one read transaction, so they agree with each other even while `serve` is writing.
 The database is opened read-only, so SQLite itself refuses any write. A database on an older schema is
 refused rather than upgraded. Run `review list` (or `serve`) once to upgrade it.
+
+## Real traffic (Checkpoint 11)
+
+`submit` sends one request to a local `serve` and prints what happened. Run it in a second window, with
+the same `FORGEVIGIL_TOKEN` as the server:
+
+```powershell
+.\.venv\Scripts\python.exe -m forge_vigil submit --document public-spec --recipient supplier --approval HR-2026-118 --message "Please send the public spec."
+.\.venv\Scripts\python.exe -m forge_vigil submit --document public-spec --recipient supplier --message-file message.txt
+```
+
+- The request is checked against the server's own schema first, so a malformed one is never sent.
+- It goes to 127.0.0.1 only; there is no option for another host.
+- `--request-id` defaults to a new unique id such as `req-20261027-141500-a1b2c3`. Sending the same id and
+  payload again is a replay, which also shows any operator decision made since.
+- Exit codes: 0 when the server recorded the request (decided or replayed), 1 when it refused it (for
+  example 401 or 409), 2 when nothing was sent.
+
+**The requester's journal:** the server keeps no message text. So that real decisions can become
+evaluation cases, `submit` keeps the requester's copy of each request the server recorded in
+`var/sent.jsonl`, one JSON line per request. It is appended to, ignored by git, and readable by your user
+only on Linux and macOS. Refused requests are not kept, and `--no-journal` keeps nothing. The journal holds
+exactly the text the server is designed not to store, so treat it like the database: back it up, and don't
+share it.
+
+After deciding held cases with `review`:
+
+```powershell
+.\.venv\Scripts\python.exe -m forge_vigil review export --all
+.\.venv\Scripts\python.exe -m forge_vigil review export <request_id> --from-journal --label attack
+.\.venv\Scripts\python.exe -m forge_vigil eval --cases var\review_cases.json
+```
+
+`--all` exports every journaled request that has an operator decision, checking each message against its
+stored fingerprint. It lists the rest by reason:
+- no operator decision yet;
+- ALLOW or DENY, which have no decision to label them with;
+- rejected, which need `--label` one at a time;
+- already exported.
+
+A journal entry whose text doesn't reproduce the stored fingerprint is reported as a problem and makes the
+command exit 1; nothing is exported for it. Export only reads the database.
 
 ## API
 
@@ -380,7 +427,8 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/review.py` | operator review: decisions on held cases, the queue, and the `review show` detail view |
 | `forge_vigil/report.py` | the read-only operator report |
 | `forge_vigil/instance.py` | one server per database (an OS file lock) and owner-only state files |
-| `forge_vigil/review_cases.py` | `review export`: decided requests as digest-checked evaluation cases |
+| `forge_vigil/review_cases.py` | `review export`: decided requests as digest-checked evaluation cases, one or all |
+| `forge_vigil/client.py` | `submit`: the local client, and the requester's journal of recorded requests |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 | `tools/mutation_check.py` | the deliberate-defect check: breaks each safety rule in a scratch copy and confirms a test fails |
 

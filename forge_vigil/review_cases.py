@@ -166,3 +166,44 @@ def export_case(
     partial.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(partial, cases_path)
     return case
+
+
+# How `export_all` reports each journaled request; codes from export_case map onto these groups.
+EXPORT_GROUPS = (
+    "exported",
+    "pending",           # held, but no operator decision yet
+    "final",             # ALLOW or DENY: there is no decision to label it with
+    "label_required",    # rejected: export it alone with --label
+    "already_exported",
+    "not_found",         # journaled, but this database has no completed request with that id
+    "message_mismatch",  # the journal's text does not reproduce the stored fingerprint
+    "failed",            # anything else, such as a missing digest key
+)
+
+
+def export_all(
+    store: Store,
+    *,
+    actor_id: str,
+    journal: dict[str, dict],
+    cases_path: Path = DEFAULT_CASES_PATH,
+    exported_at: str,
+) -> dict[str, list[str]]:
+    """Export every decided request found in the requester's journal. Returns request ids by group.
+
+    Each one goes through export_case, so its message must reproduce the stored fingerprint."""
+    groups: dict[str, list[str]] = {name: [] for name in EXPORT_GROUPS}
+    for request_id, entry in journal.items():
+        try:
+            export_case(store, actor_id=actor_id, request_id=request_id, message_text=entry["message"],
+                        cases_path=cases_path, exported_at=exported_at)
+        except ExportError as exc:
+            if exc.code == "not_decided":
+                receipt = store.get_receipt(actor_id, request_id)
+                group = "final" if receipt and receipt["disposition"] in ("ALLOW", "DENY") else "pending"
+            else:
+                group = exc.code if exc.code in groups else "failed"
+            groups[group].append(request_id)
+        else:
+            groups["exported"].append(request_id)
+    return groups

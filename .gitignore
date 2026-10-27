@@ -10,6 +10,7 @@ var/
 *.sqlite3-shm
 *.sqlite3.lock
 *.sqlite3.key
+sent.jsonl
 *.db
 
 # Secrets and local configuration
