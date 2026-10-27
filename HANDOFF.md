@@ -29,7 +29,8 @@
 | `8febbf4` | 0.10.0 | Checkpoint 10: keyed request fingerprints; `tools/mutation_check.py`; HANDOFF consolidated |
 | `3cb4587` | 0.10.0 | HANDOFF: Checkpoint 10 Windows results (run 19) |
 | `8b2ac9c` | 0.11.0 | Checkpoint 11: `submit` with the requester's journal; `review export --all` and `--from-journal`; the lock test reaps its second server |
-| this commit | 0.12.0 | Checkpoint 12: `HANDSHAKE.md` and `tools/handshake.py`, the handshake for an incoming agent |
+| `550e811` | 0.12.0 | Checkpoint 12: `HANDSHAKE.md` and `tools/handshake.py`, the handshake for an incoming agent |
+| this commit | 0.12.0 | HANDOFF: Checkpoint 11 and 12 Windows results (runs 20 and 21) |
 
 ## What exists (0.12.0)
 - **Request path:**
@@ -107,7 +108,8 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 | 17 | 0.7.1 | v5 is the default with no flag: `attack-amended-approval` was flagged both times. |
 | 18 | 0.8.0 to 0.9.0 | Windows test suite: the lock checks passed on their first run. Two cleanup errors were fixed in 0.8.1, and 84 tests passed at 0.9.0. |
 | 19 | 0.10.0 | Windows: `Ran 98 tests ... OK (skipped=1)`; `tools/mutation_check.py` reported 75 of 75 caught, with 4 skipped on this platform (the POSIX-only file-mode checks). |
-| 20 | 0.11.0 | The operator reported that runbook 4 cells L0 to L3 (cleanup, apply and test, commit and push, confirm and mutation check) ran without problems; their output was not pasted. GitHub has `8b2ac9c` with content tree `7ebaf5b0`, the Checkpoint 11 content, checked from the cloud. |
+| 20 | 0.11.0 | Windows: `tools/mutation_check.py` reported 82 of 82 caught, 5 skipped on this platform, and no test servers were left running afterwards. The real-traffic smoke on throwaway state (runbook 4, L4) passed all 10 checks: allow, hold, deny, a reused id refused, release, the replay showing it, `export --all` both ways, `eval` on the exported case, and git ignoring it. The L0 and L1 output was not pasted; the operator reported both ran without problems. |
+| 21 | 0.12.0 | Windows: `Ran 108 tests ... OK (skipped=1)`; committed and pushed as `550e811`; `tools/mutation_check.py` reported 86 of 86 caught, 5 skipped, with no test servers left. GitHub's `550e811` has content tree `0c399096`, checked from the cloud. The handshake report from that run was not pasted. |
 
 **Prompt promotion decision (runs 12 to 16, $2.66), against rules fixed before the data:**
 - **Rule 1, no benign request flagged:** passed, 0/75.
@@ -163,7 +165,6 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 
 ## Next steps
 1. **Back up `var/forgevigil.sqlite3`, its `.key`, and `var/sent.jsonl` together.**
-2. **Paste the runbook 4 outputs (L3 and L4)** so run 20 records the numbers rather than a report.
-3. **Handshake with the incoming agent:** give it access to the repository, ask it to follow `HANDSHAKE.md`, and compare its `tools/handshake.py` output and answers with the values you were given. Assign work only after it matches.
-4. **Real traffic:** send genuine requests with `submit`, decide the held ones, then run `review export --all` and `eval --cases var/review_cases.json` (risk 1).
-5. **Possible later checkpoints (operator's choice):** hosting on the operator's Cloudflare domain (deferred); digest-key rotation.
+2. **Handshake with the incoming agent:** give it access to the repository, ask it to follow `HANDSHAKE.md`, and compare its `tools/handshake.py` output and answers with the values the operator holds (an answer key kept outside the repository). Assign work only after they match.
+3. **Real traffic:** send genuine requests with `submit`, decide the held ones, then run `review export --all` and `eval --cases var/review_cases.json` (risk 1).
+4. **Possible later checkpoints (operator's choice):** hosting on the operator's Cloudflare domain (deferred); digest-key rotation.
