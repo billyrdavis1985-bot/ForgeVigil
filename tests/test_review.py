@@ -20,11 +20,11 @@ from pathlib import Path
 from forge_vigil.assessment import FIXTURE_CLEAN_OUTPUT, FixedAssessor, fixed_clean_assessor
 from forge_vigil.demo import run_demo
 from forge_vigil.fixtures import PUBLIC_SPEC_CONTENT, FixtureSet, Recipient, default_fixtures
-from forge_vigil.review import ReviewError, decide
+from forge_vigil.review import ReviewError, decide, describe_case, explain_reason
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService, build_outbox_item
 from forge_vigil.store import ReviewRefused, Store
-from tests.support import OPERATOR_TOKEN, Harness, db_execute, valid_payload
+from tests.support import OPERATOR_TOKEN, Harness, db_execute, dump_all_rows, valid_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 THREAT = {**FIXTURE_CLEAN_OUTPUT, "threat_finding": "threat", "reason_code": "INJECTED_TEST_THREAT",
@@ -236,6 +236,75 @@ class ReviewTests(unittest.TestCase):
         missing = self.tmp / "missing.sqlite3"
         self.assertEqual(run("list", db=missing).returncode, 2)
         self.assertFalse(missing.exists())  # nothing is created for a wrong path
+
+    def cli(self, *args, db=None):
+        return subprocess.run([sys.executable, "-m", "forge_vigil", "review", *args, "--db", str(db or self.db_path)],
+                              cwd=REPO_ROOT, capture_output=True, text=True, timeout=60)
+
+    def test_show_explains_a_held_case_and_gives_its_commands(self):
+        self.record(FixedAssessor(MANIPULATION, adapter_id="fixture.manipulation.test"),
+                    request_id="req-flagged", approval_ref="HR-2026-999")
+        before = dump_all_rows(self.db_path)
+        shown = self.cli("show", "req-flagged")
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        for line in (
+            "Outcome:   REVIEW APPROVAL_UNVERIFIED, delivered: no",
+            "  why: the approval reference is not in the registry, so it cannot be confirmed",
+            "  finding: threat (APPROVAL_MANIPULATION), status completed",
+            "  evidence: fixture:injected-threat -> verified",
+            "Decision:  pending; allowed: release or reject",
+            "  python -m forge_vigil review release req-flagged --reviewer <you> --despite-threat",
+            "  python -m forge_vigil review reject req-flagged --reviewer <you>",
+        ):
+            self.assertIn(line, shown.stdout.splitlines())
+        self.assertEqual(dump_all_rows(self.db_path), before)  # show is read-only
+
+        self.decide("req-flagged", "release", despite_threat=True)
+        shown = self.cli("show", "req-flagged").stdout
+        self.assertIn("Outcome:   REVIEW APPROVAL_UNVERIFIED, delivered: yes", shown)
+        self.assertIn("Decision:  release with --despite-threat by billy at", shown)
+        self.assertNotIn("--reviewer <you>", shown)
+
+    def test_show_covers_blocks_final_results_and_errors(self):
+        self.record(FixedAssessor(THREAT, adapter_id="fixture.injected-threat.test"), request_id="req-blocked")
+        self.record(request_id="req-allowed")
+        self.record(request_id="req-denied", document_id="restricted-cost-sheet")
+        blocked = self.cli("show", "req-blocked").stdout
+        self.assertIn("  python -m forge_vigil review confirm req-blocked --reviewer <you>", blocked)
+        self.assertIn("  python -m forge_vigil review false-positive req-blocked --reviewer <you>", blocked)
+        self.assertNotIn("--despite-threat", blocked)  # a BLOCK can never be released
+        self.assertIn("Decision:  none possible; ALLOW results are final", self.cli("show", "req-allowed").stdout)
+        denied = self.cli("show", "req-denied").stdout
+        self.assertIn("Model:     not called (scope checks decided before any assessment)", denied)
+        self.assertIn("  why: the document may not leave the business", denied)
+
+        as_json = json.loads(self.cli("show", "req-blocked", "--json").stdout)
+        self.assertEqual((as_json["receipt"]["disposition"], as_json["review"]), ("BLOCK", None))
+        missing = self.cli("show", "req-unknown")
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("not found", missing.stderr)
+        self.assertEqual(self.cli("show", "req-blocked", db=self.tmp / "missing.sqlite3").returncode, 2)
+
+    def test_show_tolerates_receipts_from_older_versions(self):
+        sparse = {"request_id": "req-old", "disposition": "REVIEW", "reason_code": "APPROVAL_MISSING",
+                  "assessment": {"status": "completed", "threat_finding": "none"}}
+        text = describe_case(sparse, None)
+        self.assertIn("Decision:  pending; allowed: release or reject", text)
+        self.assertIn("Cost:      unknown USD", text)
+        self.assertEqual(explain_reason("ASSESSMENT_MODEL_OUTPUT_TRUNCATED"),
+                         "the model assessment failed (MODEL_OUTPUT_TRUNCATED)")
+        self.assertEqual(explain_reason("SOMETHING_NEW"), "no explanation recorded for this code")
+
+    def test_list_can_show_only_pending_cases(self):
+        self.record(request_id="req-decided", approval_ref=None)
+        self.record(request_id="req-waiting", approval_ref=None)
+        self.decide("req-decided", "reject")
+        pending = self.cli("list", "--pending").stdout
+        self.assertIn("req-waiting", pending)
+        self.assertNotIn("req-decided", pending)
+        self.assertIn("req-decided", self.cli("list").stdout)
+        self.decide("req-waiting", "reject")
+        self.assertIn("No pending REVIEW or BLOCK cases.", self.cli("list", "--pending").stdout)
 
     def test_store_upgrades_from_schema_2(self):
         Store(self.db_path)

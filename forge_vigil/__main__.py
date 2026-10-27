@@ -30,7 +30,12 @@ def main(argv: list[str] | None = None) -> int:
     actions = review.add_subparsers(dest="action", required=True)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
-    actions.add_parser("list", parents=[common], help="show REVIEW and BLOCK cases and their decisions")
+    listing = actions.add_parser("list", parents=[common], help="show REVIEW and BLOCK cases and their decisions")
+    listing.add_argument("--pending", action="store_true", help="only cases still waiting for a decision")
+    show = actions.add_parser("show", parents=[common],
+                              help="everything about one case: why it was held, the model's evidence, cost, commands")
+    show.add_argument("request_id")
+    show.add_argument("--json", action="store_true", help="print the receipt and any decision as JSON instead")
     for action, help_text in (
         ("release", "deliver a held REVIEW case (scope checks are re-run first)"),
         ("reject", "close a REVIEW case without delivery"),
@@ -151,9 +156,11 @@ def _review(args) -> int:
         return 2
     if args.action == "export":
         return _export_case(args)
+    if args.action == "show":
+        return _show_case(args)
     store = Store(args.db)
     if args.action == "list":
-        print(format_queue(store.review_queue()))
+        print(format_queue(store.review_queue(), pending_only=args.pending))
         return 0
     try:
         review = decide(
@@ -172,6 +179,31 @@ def _review(args) -> int:
         print("failed: the database refused the write, so nothing was recorded or delivered", file=sys.stderr)
         return 1
     print(json.dumps(review, indent=2, sort_keys=True))
+    return 0
+
+
+def _show_case(args) -> int:
+    import json
+    import sqlite3
+
+    from .fixtures import OPERATOR_ACTOR_ID
+    from .review import describe_case
+    from .store import Store
+
+    try:
+        store = Store(args.db, read_only=True)
+        receipt = store.get_receipt(OPERATOR_ACTOR_ID, args.request_id)
+        review = store.get_review(OPERATOR_ACTOR_ID, args.request_id)
+    except (RuntimeError, sqlite3.Error) as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    if receipt is None:
+        print(f"not found: no completed request {args.request_id!r}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"receipt": receipt, "review": review}, indent=2, sort_keys=True))
+    else:
+        print(describe_case(receipt, review))
     return 0
 
 

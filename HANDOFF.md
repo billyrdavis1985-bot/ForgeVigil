@@ -1,9 +1,9 @@
 # HANDOFF: ForgeVigil
 
 ## Session
-- **Checkpoints 02 to 08**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1, 0.6.2 and 0.8.1 fixes and the 0.7.1 prompt promotion, all driven by live or Windows runs. Checkpoint 08 was built ahead while the operator was away from the PC, at their request. All were assigned by the operator in the session that built Checkpoint 01.
-- **Date:** 2026-10-26, America/New_York. By the system clock: Checkpoint 02 from about 15:56 EDT, 0.2.1 from 16:25, Checkpoint 03 from 16:52, 0.3.1 from 17:16, Checkpoint 04 from 17:26, 0.4.1 from 17:52, Checkpoint 05 until about 18:20, Checkpoint 06 until about 19:20, 0.6.1 after live run 8, 0.6.2 from about 20:00 after run 11, Checkpoint 07 until about 21:05, 0.7.1 at about 21:45 after runs 12 to 16; Checkpoint 08 the next day.
-- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07), `4a88eb3` (0.7.1), `0a73f65` (Checkpoint 08). All were authored and pushed by the operator; the cloud session cannot push (403). 0.8.1 is a patch on top of Checkpoint 08's content (tree `b4812b67…`). Commits never carry attribution trailers (see AGENTS.md).
+- **Checkpoints 02 to 09**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1, 0.6.2 and 0.8.1 fixes and the 0.7.1 prompt promotion, all driven by live or Windows runs. Checkpoints 08 and 09 were built ahead while the operator was away from the PC, at their request. All were assigned by the operator in the session that built Checkpoint 01.
+- **Date:** 2026-10-26, America/New_York. By the system clock: Checkpoint 02 from about 15:56 EDT, 0.2.1 from 16:25, Checkpoint 03 from 16:52, 0.3.1 from 17:16, Checkpoint 04 from 17:26, 0.4.1 from 17:52, Checkpoint 05 until about 18:20, Checkpoint 06 until about 19:20, 0.6.1 after live run 8, 0.6.2 from about 20:00 after run 11, Checkpoint 07 until about 21:05, 0.7.1 at about 21:45 after runs 12 to 16; Checkpoints 08 and 09 the next day.
+- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07), `4a88eb3` (0.7.1), `0a73f65` (Checkpoint 08). All were authored and pushed by the operator; the cloud session cannot push (403). 0.8.1 is a patch on top of Checkpoint 08's content (tree `b4812b67…`), and Checkpoint 09 (0.9.0) is a patch on top of 0.8.1's (tree `60449cb1…`). Commits never carry attribution trailers (see AGENTS.md).
 
 ## What exists now
 - **Checkpoint 01:** authenticated local request → advisory assessment → deterministic permission → at most one outbox item → durable receipt.
@@ -111,6 +111,16 @@
     - `remove_tree` retries a busy delete for up to 10 s.
     - A new cleanup check, `files_held_open_under`, fails a test that leaves any file open in its temp folder. It reads `/proc/self/fd` on Linux, so the Windows-only symptom is now caught in the cloud too. Reintroducing the original leak makes it fail.
   - **Process slip:** the Checkpoint 08 commit cell ran after its test cell reported TESTS FAILED, so `0a73f65` was pushed with these two cleanup errors. From now on, commit cells re-run the test suite and refuse to commit unless it passes.
+- **Checkpoint 09 (0.9.0), review detail view:**
+  - `review show <request_id>` opens the database read-only and prints `review.describe_case`:
+    - the request facts and the approval check;
+    - the outcome, with a plain-language reason from `REASON_EXPLANATIONS` (`ASSESSMENT_*` failures are explained generically);
+    - the model, prompt version, finding, validation error and each evidence ref with its result;
+    - the quote check counts (hashes only), calls, finish reasons, retries, any HTTP refusal, and the cost.
+  - Then the decision if one exists. Otherwise it lists the allowed decisions as copy-ready commands, adding `--despite-threat` only to a release of a model-flagged REVIEW case; a BLOCK is never offered a release.
+  - `--json` prints the receipt and the review. A missing request exits 1, and a missing database exits 2.
+  - Fields are read defensively, so receipts from older versions display.
+  - `review list --pending` hides decided cases.
 
 ## Live runs (operator's PC)
 | Run | Result |
@@ -169,12 +179,14 @@ Both retries succeeded, with no model failure. This is the first live confirmati
 - **Output size:** Muse Spark's reasoning counts as output, about 900 to 4,000+ tokens per call.
 - **Cost figures are estimates:** reported tokens times the configured prices ($1.25 / $4.25 per million). Meta's billing is authoritative.
 
-## Verification (observed, 0.8.1, cloud workspace)
+## Verification (observed, 0.9.0, cloud workspace)
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tests -t . -v` | `Ran 80 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
-| Open-file check | It fails the crash test when the original leak is put back, and passes with the fix. |
-| Not covered | The fixed tests have not yet run on Windows; the operator's next run is that check. Telling a held lock from other lock errors is also untested. |
+| `python3 -m unittest discover -s tests -t . -v` | `Ran 84 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
+| Open-file check (0.8.1) | It fails the crash test when the original leak is put back, and passes with the fix. |
+| Stacked patches | A simulated PC chain gave identical content trees with `core.autocrlf` false and true, and all tests passed at each stage. The chain starts from `0a73f65` (Checkpoint 08 on GitHub, tree `b4812b67…`), then adds 0.8.1 (`60449cb1…`), then Checkpoint 09. |
+| Deliberate-defect check (scratch copy, not in repo) | Baseline: all 43 referenced tests pass on unmutated code. 71 of 71 caught. Checkpoint 08 added 7 (see its section). Checkpoint 09 added 5: <ul><li>the release command missing `--despite-threat`</li><li>a decided case still offering commands</li><li>a release shown as undelivered</li><li>the pending filter ignored</li><li>a BLOCK shown with a release override</li></ul> |
+| Not covered | <ul><li>The 0.8.1 test fixes on Windows; the operator's next run is that check.</li><li>Telling a held lock from other lock errors.</li><li>`review show` and `review export` being read-only. Neither writes, but a writable open would also change nothing on a current-schema database, so no test can tell.</li></ul> |
 
 ## Known risks and open decisions
 1. **The v5 rule is measured on fictional cases only,** 61 of them, written by the same author as the rule. Real requests may phrase approval claims in ways it misses, or trip it falsely. `review export` turns real decisions into regression cases.
@@ -187,5 +199,6 @@ Both retries succeeded, with no model failure. This is the first live confirmati
 8. **Hosting:** the operator has a domain on Cloudflare, deferred to a later checkpoint. Exposing `serve` publicly first needs a production server, TLS (for example through a Cloudflare Tunnel), per-client tokens, rate limits, single-instance enforcement and per-client spend limits.
 
 ## Next steps
-1. **Operator:** apply 0.8.1. Its commit cell re-runs the tests and refuses unless they pass. Then apply Checkpoint 09, rebuilt on top of 0.8.1.
-2. **Possible next checkpoints:** keyed input digests (the last Checkpoint 01 leftover), with the mutation checker moved into the repo and a HANDOFF consolidation; real-traffic tooling; hosting (deferred by the operator).
+1. **Operator:** apply 0.8.1, then Checkpoint 09, which was rebuilt on top of 0.8.1. Each apply cell checks the content hash first. Each commit cell re-runs the tests and refuses unless they pass.
+2. **Try it:** `review list --pending` and `review show <id>` on the real `var/forgevigil.sqlite3`, once `serve` has handled some requests.
+3. **Possible next checkpoints:** keyed input digests (the last Checkpoint 01 leftover), with the mutation checker moved into the repo and a HANDOFF consolidation; real-traffic tooling; hosting (deferred by the operator).

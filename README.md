@@ -57,6 +57,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 08:** one server per database. `serve` holds an operating-system lock on `<db>.lock` for as
   long as it runs, so a second server on the same file refuses to start; a crash releases the lock. On
   Linux and macOS the database and its side files are made readable by their owner only.
+- **Checkpoint 09:** a detail view for decisions. `review show <request_id>` explains one case in plain
+  language: why it was held, what the model found, which evidence checked out, the cost, and the exact
+  commands for each allowed decision. `review list --pending` shows only undecided cases.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -67,7 +70,7 @@ Not established yet:
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 80 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 84 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -246,7 +249,8 @@ REVIEW means "held for a human", and the `review` command is where that human de
 database `serve` writes (default `var/forgevigil.sqlite3`; use `--db` for another):
 
 ```powershell
-.\.venv\Scripts\python.exe -m forge_vigil review list
+.\.venv\Scripts\python.exe -m forge_vigil review list --pending
+.\.venv\Scripts\python.exe -m forge_vigil review show <request_id>
 .\.venv\Scripts\python.exe -m forge_vigil review release <request_id> --reviewer billy
 .\.venv\Scripts\python.exe -m forge_vigil review reject <request_id> --reviewer billy
 .\.venv\Scripts\python.exe -m forge_vigil review confirm <request_id> --reviewer billy
@@ -258,6 +262,13 @@ database `serve` writes (default `var/forgevigil.sqlite3`; use `--db` for anothe
 | REVIEW | `release` or `reject` | `release` delivers the approved document once, after re-checking actor, document and recipient against current server data |
 | BLOCK | `confirm` or `false-positive` | never; `false-positive` marks the finding as wrong; `review export` makes it an evaluation case |
 | ALLOW, DENY | none (final) | — |
+
+`review show` is read-only. It prints:
+- the outcome and a plain-language reason;
+- the model's finding and the result of each evidence check;
+- the calls, the cost, and the commands for the decisions the case allows.
+
+Add `--json` for the raw receipt and decision. `review list` without `--pending` also shows decided cases.
 
 The rules behind it:
 - **Override for flagged requests:** releasing a request the model flagged as a threat requires `--despite-threat`.
@@ -351,7 +362,7 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/demo.py` | the smoke demo, with fixture and live modes |
 | `forge_vigil/evaluation.py`, `eval_cases.json` | the labelled evaluation, repeat runs, and its 43 fictional cases |
 | `forge_vigil/eval_cases_holdout.json` | 18 held-out cases for checking that prompt changes generalise |
-| `forge_vigil/review.py` | operator review: release, reject, confirm or mark false positives on held cases |
+| `forge_vigil/review.py` | operator review: decisions on held cases, the queue, and the `review show` detail view |
 | `forge_vigil/report.py` | the read-only operator report |
 | `forge_vigil/instance.py` | one server per database (an OS file lock) and owner-only state files |
 | `forge_vigil/review_cases.py` | `review export`: decided requests as digest-checked evaluation cases |

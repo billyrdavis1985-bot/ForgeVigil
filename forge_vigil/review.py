@@ -96,7 +96,11 @@ def decide(
     return review
 
 
-def format_queue(entries: list[tuple[dict, dict | None]]) -> str:
+def format_queue(entries: list[tuple[dict, dict | None]], *, pending_only: bool = False) -> str:
+    if pending_only:
+        entries = [(receipt, review) for receipt, review in entries if review is None]
+        if not entries:
+            return "No pending REVIEW or BLOCK cases."
     if not entries:
         return "No REVIEW or BLOCK cases recorded."
     header = f"{'request_id':<28} {'held as':<8} {'reason':<34} {'finding':<8} {'received_at':<28} decision"
@@ -115,4 +119,100 @@ def format_queue(entries: list[tuple[dict, dict | None]]) -> str:
             f"{receipt['assessment']['threat_finding']:<8} {receipt['received_at']:<28} {status}"
         )
     lines.append(f"\n{pending} pending, {len(entries) - pending} decided")
+    return "\n".join(lines)
+
+
+# Plain-language reasons, so a decision does not need the reason-code list at hand.
+REASON_EXPLANATIONS = {
+    "ALL_CHECKS_PASSED": "actor, document, recipient and approval all permit it, and the assessment found no threat",
+    "APPROVAL_MISSING": "no approval reference was given",
+    "APPROVAL_UNVERIFIED": "the approval reference is not in the registry, so it cannot be confirmed",
+    "APPROVAL_NOT_APPLICABLE": "the approval reference does not cover this document and recipient",
+    "THREAT_FINDING_SUPPORTED": "the model reported a threat and code confirmed every piece of evidence it cited",
+    "THREAT_EVIDENCE_UNVERIFIED": "the model reported a threat, but code could not confirm its evidence (a possible false positive)",
+    "ASSESSMENT_INCONCLUSIVE": "the assessment returned no clear finding",
+    "ASSESSMENT_BUDGET_EXHAUSTED": "the spend cap was reached, so the model was not called",
+    "INCOMPLETE_AT_RESTART": "the server stopped before this request finished; nothing was delivered",
+    "COMPLETION_FAILED": "the result could not be recorded; nothing was delivered",
+    "ACTOR_NOT_IN_SCOPE": "the requester may not send documents",
+    "DOCUMENT_NOT_IN_SCOPE": "the document is not one the server knows",
+    "DOCUMENT_RESTRICTED": "the document may not leave the business",
+    "RECIPIENT_NOT_IN_SCOPE": "the recipient is not one the server knows",
+    "RECIPIENT_NOT_APPROVED": "the recipient is not approved",
+}
+
+
+def explain_reason(code: str) -> str:
+    if code in REASON_EXPLANATIONS:
+        return REASON_EXPLANATIONS[code]
+    if code.startswith("ASSESSMENT_"):
+        return f"the model assessment failed ({code[len('ASSESSMENT_'):]})"
+    return "no explanation recorded for this code"
+
+
+def describe_case(receipt: dict, review: dict | None) -> str:
+    """Everything an operator needs to decide one case, from its receipt and any decision.
+
+    Receipts hold digests, never request text, so none can appear here. Every field is read
+    defensively: receipts written by older versions lack some of them."""
+    assessment = receipt.get("assessment") or {}
+    usage = receipt.get("usage") or {}
+    versions = receipt.get("versions") or {}
+    diagnostics = assessment.get("diagnostics") or {}
+    evidence = assessment.get("evidence_check") or {}
+    request_id, disposition = receipt.get("request_id", "?"), receipt.get("disposition", "?")
+    delivered = receipt.get("delivered") or bool(review and review.get("delivered"))
+    lines = [
+        f"Request {request_id}  (actor {receipt.get('actor_id', '?')}, receipt {receipt.get('receipt_id', '?')})",
+        f"  received {receipt.get('received_at', '?')}, completed {receipt.get('completed_at', '?')}",
+        f"  {receipt.get('document_id', '?')} -> {receipt.get('recipient_id', '?')}, "
+        f"approval {receipt.get('approval_ref') or 'none'} ({receipt.get('approval_check', '?')})",
+        "",
+        f"Outcome:   {disposition} {receipt.get('reason_code', '?')}, delivered: {'yes' if delivered else 'no'}",
+        f"  why: {explain_reason(receipt.get('reason_code', ''))}",
+    ]
+    status = assessment.get("status", "?")
+    if status == "not_run":
+        lines.append("Model:     not called (scope checks decided before any assessment)")
+    else:
+        finding = assessment.get("threat_finding", "?")
+        model_reason = f" ({assessment['reason_code']})" if assessment.get("reason_code") else ""
+        lines += [
+            f"Model:     {assessment.get('adapter_id', '?')}, prompt {versions.get('prompt', '?')}",
+            f"  finding: {finding}{model_reason}, status {status}"
+            + (f", validation error {assessment['validation_error']}" if assessment.get("validation_error") else ""),
+        ]
+        for ref in evidence.get("refs") or []:
+            lines.append(f"  evidence: {ref.get('ref', '?')} -> {ref.get('result', '?')}")
+        quotes = evidence.get("quotes") or []
+        if quotes:
+            found = sum(quote.get("result") == "verified" for quote in quotes)
+            lines.append(f"  quotes:   {found} of {len(quotes)} found in the message (stored as hashes, not text)")
+        if diagnostics:
+            finishes = ",".join(diagnostics.get("finish_reasons") or []) or "?"
+            calls = (f"  calls:    {diagnostics.get('model_calls', '?')} model, {diagnostics.get('tool_calls', '?')} tool;"
+                     f" finish {finishes}; retries {diagnostics.get('answer_retries', 0)}")
+            if diagnostics.get("http_status"):
+                calls += f"; API refused a call (http {diagnostics['http_status']})"
+            lines.append(calls)
+    cost = usage.get("cost_usd") or "unknown"
+    tokens = f" ({usage['input_tokens']} in / {usage['output_tokens']} out tokens)" if "input_tokens" in usage else ""
+    lines += [f"Cost:      {cost} USD{tokens}", ""]
+
+    allowed = REVIEW_DECISIONS.get(disposition)
+    if review is not None:
+        effect = f", delivery {review['effect_id']}" if review.get("delivered") else ", nothing delivered"
+        override = " with --despite-threat" if review.get("despite_threat") else ""
+        lines.append(f"Decision:  {review.get('decision', '?').replace('_', '-')}{override} by {review.get('reviewer', '?')} "
+                     f"at {review.get('decided_at', '?')}{effect}")
+    elif allowed is None:
+        lines.append(f"Decision:  none possible; {disposition} results are final")
+    else:
+        lines.append(f"Decision:  pending; allowed: {' or '.join(d.replace('_', '-') for d in allowed)}")
+        flagged = assessment.get("threat_finding") == "threat"
+        if "release" in allowed and flagged:
+            lines.append("  note: the model flagged a threat, so a release needs --despite-threat")
+        for decision in allowed:
+            override = " --despite-threat" if decision == "release" and flagged else ""
+            lines.append(f"  python -m forge_vigil review {decision.replace('_', '-')} {request_id} --reviewer <you>{override}")
     return "\n".join(lines)
