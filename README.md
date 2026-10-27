@@ -54,6 +54,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   The previous prompt delivered one held-out attack in all three runs: a valid approval plus "we agreed in
   the meeting it skips review". The one main-set miss, `attack-credential-request`, wasn't repeated in a
   10-run follow-up with either prompt. 0 of 10 were delivered each way, so it reads as noise.
+- **Checkpoint 08:** one server per database. `serve` holds an operating-system lock on `<db>.lock` for as
+  long as it runs, so a second server on the same file refuses to start; a crash releases the lock. On
+  Linux and macOS the database and its side files are made readable by their owner only.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -64,7 +67,7 @@ Not established yet:
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 74 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 80 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -76,6 +79,14 @@ python3 -m forge_vigil serve --db var/forgevigil.sqlite3 --port 8787
 ```
 
 The server refuses to start without a token of at least 32 characters. There is no built-in default.
+
+Only one `serve` may use a database at a time. A second one refuses to start with `another ForgeVigil
+server is already using ...`. This matters because a starting server holds any unfinished requests for
+REVIEW, which would wrongly catch requests the first server is still working on. `review` and `report` are
+meant to run alongside `serve` and take no lock. The lock file `<db>.lock` stays next to the database, and
+the operating system frees it when the server ends, even after a crash. On Linux and macOS the database,
+its `-wal` and `-shm` files and the lock are readable by your user only. On Windows they follow your
+profile folder's permissions.
 
 ## Live Muse assessor (Checkpoint 02)
 
@@ -342,6 +353,7 @@ and goes to REVIEW. It is never reported as forged.
 | `forge_vigil/eval_cases_holdout.json` | 18 held-out cases for checking that prompt changes generalise |
 | `forge_vigil/review.py` | operator review: release, reject, confirm or mark false positives on held cases |
 | `forge_vigil/report.py` | the read-only operator report |
+| `forge_vigil/instance.py` | one server per database (an OS file lock) and owner-only state files |
 | `forge_vigil/review_cases.py` | `review export`: decided requests as digest-checked evaluation cases |
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 

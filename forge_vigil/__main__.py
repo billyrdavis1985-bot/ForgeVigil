@@ -257,6 +257,7 @@ def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
     from .assessment import fixed_clean_assessor
     from .fixtures import OPERATOR_ACTOR_ID, default_fixtures
     from .http_api import BIND_HOST, TOKEN_ENV_VAR, ConfigError, ForgeVigilHTTPServer, token_from_env
+    from .instance import InstanceLock, InstanceLockError, secure_state_files
     from .service import ForgeVigilService
     from .store import Store
 
@@ -275,30 +276,41 @@ def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
         if live_config is None:
             return 2
 
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    store = Store(db_path)
-    fixtures = default_fixtures()
-    if live_config is None:
-        assessor = fixed_clean_assessor()
-        mode = "fixture assessor; no model inference"
-    else:
-        from .assessment import format_usd
-        from .muse import MuseAssessor
-
-        assessor = MuseAssessor(live_config, store, fixtures)
-        mode = f"LIVE assessor {assessor.adapter_id}; spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
-    service = ForgeVigilService(store, assessor, fixtures=fixtures)
-    if service.recovered:
-        print(f"held {len(service.recovered)} incomplete request(s) for REVIEW after restart")
-    server = ForgeVigilHTTPServer(service, {token: OPERATOR_ACTOR_ID}, port=port)
-    print(f"ForgeVigil listening on http://{BIND_HOST}:{server.server_port} ({mode})")
-    print("Development server: local only, NOT a public deployment server.")
+    db_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock = InstanceLock(db_path)
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+        # Before anything touches the database: startup recovery assumes no other server is using it.
+        lock.acquire()
+    except InstanceLockError as exc:
+        print(f"refusing to start: {exc}", file=sys.stderr)
+        return 2
+    try:
+        secure_state_files(db_path)
+        store = Store(db_path)
+        fixtures = default_fixtures()
+        if live_config is None:
+            assessor = fixed_clean_assessor()
+            mode = "fixture assessor; no model inference"
+        else:
+            from .assessment import format_usd
+            from .muse import MuseAssessor
+
+            assessor = MuseAssessor(live_config, store, fixtures)
+            mode = f"LIVE assessor {assessor.adapter_id}; spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
+        service = ForgeVigilService(store, assessor, fixtures=fixtures)
+        if service.recovered:
+            print(f"held {len(service.recovered)} incomplete request(s) for REVIEW after restart")
+        server = ForgeVigilHTTPServer(service, {token: OPERATOR_ACTOR_ID}, port=port)
+        print(f"ForgeVigil listening on http://{BIND_HOST}:{server.server_port} ({mode})", flush=True)
+        print("Development server: local only, NOT a public deployment server.", flush=True)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
     finally:
-        server.server_close()
+        lock.release()
     return 0
 
 

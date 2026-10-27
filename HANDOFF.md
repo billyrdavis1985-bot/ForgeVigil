@@ -1,9 +1,9 @@
 # HANDOFF: ForgeVigil
 
 ## Session
-- **Checkpoints 02 to 07**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1 and 0.6.2 fixes and the 0.7.1 prompt promotion, all driven by live runs. All were assigned by the operator in the session that built Checkpoint 01.
-- **Date:** 2026-10-26, America/New_York. By the system clock: Checkpoint 02 from about 15:56 EDT, 0.2.1 from 16:25, Checkpoint 03 from 16:52, 0.3.1 from 17:16, Checkpoint 04 from 17:26, 0.4.1 from 17:52, Checkpoint 05 until about 18:20, Checkpoint 06 until about 19:20, 0.6.1 after live run 8, 0.6.2 from about 20:00 after run 11, Checkpoint 07 until about 21:05, 0.7.1 at about 21:45 after runs 12 to 16.
-- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07). All were authored and pushed by the operator. 0.7.1 was delivered as a patch on top of `d74fcf6` for the operator to apply and commit. Commits never carry attribution trailers (see AGENTS.md).
+- **Checkpoints 02 to 08**, plus the 0.2.1, 0.3.1, 0.4.1, 0.6.1 and 0.6.2 fixes and the 0.7.1 prompt promotion, all driven by live runs. Checkpoint 08 was built ahead while the operator was away from the PC, at their request. All were assigned by the operator in the session that built Checkpoint 01.
+- **Date:** 2026-10-26, America/New_York. By the system clock: Checkpoint 02 from about 15:56 EDT, 0.2.1 from 16:25, Checkpoint 03 from 16:52, 0.3.1 from 17:16, Checkpoint 04 from 17:26, 0.4.1 from 17:52, Checkpoint 05 until about 18:20, Checkpoint 06 until about 19:20, 0.6.1 after live run 8, 0.6.2 from about 20:00 after run 11, Checkpoint 07 until about 21:05, 0.7.1 at about 21:45 after runs 12 to 16; Checkpoint 08 the next day.
+- **Commits on `main`:** `bb4b85a` (Checkpoint 01), `822fc0b` (Checkpoint 02), `0d77111` (0.2.1), `344859c` (Checkpoint 03), `2e22568` (0.3.1), `3fef440` (Checkpoint 04), `b0885f8` (0.4.1), `80f18e5` (Checkpoint 05), `ad0f3a0` (Checkpoint 06), `bbd9674` (0.6.1), `b1ee36e` (0.6.2), `d74fcf6` (Checkpoint 07). All were authored and pushed by the operator. The operator approved 0.7.1. The cloud session committed it locally as `27c9c0e`, but its push was refused (403), so the operator pushes it from the PC. Checkpoint 08 (0.8.0) is a patch on top of 0.7.1's content (tree `fbdfe14f…`), applied after 0.7.1 is committed. Commits never carry attribution trailers (see AGENTS.md).
 
 ## What exists now
 - **Checkpoint 01:** authenticated local request → advisory assessment → deterministic permission → at most one outbox item → durable receipt.
@@ -88,6 +88,20 @@
   - The base text is renamed `BASE_SYSTEM_PROMPT`.
   - A test pins both prompt texts by SHA-256 to what the live runs measured: v4 `314af944…` (run 11) and v5 `2cad778c…` (runs 13, 14 and 16). The v5 hash was taken before the rename, so the promoted text is byte-identical to the measured one.
   - The mutation script, which is outside the repo, now first checks that every test it references passes on unmutated code. Before this, a mutant pointing at a renamed test "passed" because the missing test errored. Two Checkpoint 07 mutants briefly did exactly that while this change was in progress.
+- **Checkpoint 08 (0.8.0), one server per database:**
+  - `serve` takes an exclusive OS lock on `<db>.lock` (`instance.InstanceLock`) before it opens the database. It holds the lock until it exits, and a second `serve` on the same file exits 2 with "another ForgeVigil server is already using …".
+    - The defect fixed: startup recovery holds in-progress requests for REVIEW and marks in-flight spend unknown, so a second server could interrupt the first server's live work.
+  - The OS releases the lock however the process ends, so no stale lock is possible. The lock file is left in place and is git-ignored (`*.sqlite3.lock`).
+  - Lock errors are told apart: "already using" only for a held lock (EAGAIN, EWOULDBLOCK, EACCES or EDEADLK). An unopenable or unlockable lock file is reported as such.
+  - `review` and `report` take no lock, by design.
+  - On POSIX, `secure_state_files` creates a new database 0600 or tightens an existing one, along with its -wal and -shm files; SQLite gives the side files the database's mode. Windows is left to the profile folder's access list.
+  - `serve` creates a missing state folder with mode 0700 and flushes its startup lines.
+  - Tests start real `serve` processes:
+    - a second one is refused while the first runs;
+    - a killed holder frees the lock;
+    - a refused `serve` creates no database;
+    - on POSIX, the state files end up 0600.
+  - Platform coverage: the Windows lock path (`msvcrt.locking`) is untested in the cloud workspace. Its first run will be the operator's test suite.
 
 ## Live runs (operator's PC)
 | Run | Result |
@@ -144,13 +158,12 @@ Both retries succeeded, with no model failure. This is the first live confirmati
 - **Output size:** Muse Spark's reasoning counts as output, about 900 to 4,000+ tokens per call.
 - **Cost figures are estimates:** reported tokens times the configured prices ($1.25 / $4.25 per million). Meta's billing is authoritative.
 
-## Verification (observed, 0.7.1, cloud workspace)
+## Verification (observed, 0.8.0, cloud workspace)
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tests -t . -v` | `Ran 74 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1). |
-| Prompt pins | Both SHA-256 pins match. The v5 pin was taken before the rename. |
-| `eval --prompt previous` and `--prompt candidate` with the fixture assessor | Both exit 2. `previous` is refused as needing `--assessor muse`; `candidate` is no longer a valid choice. |
-| Deliberate-defect check (scratch copy, not in repo) | Baseline: all 35 referenced tests pass on unmutated code. 59 of 59 caught. Since 0.7.0: one new check (the promoted rule weakened in place), and three updated for the promotion. |
+| `python3 -m unittest discover -s tests -t . -v` | `Ran 80 tests ... OK` on Python 3.11.17, 3.12.3 and 3.13.17 (SQLite 3.45.1), Linux. |
+| Deliberate-defect check (scratch copy, not in repo) | Baseline: all 40 referenced tests pass on unmutated code. 66 of 66 caught. The 7 new ones: <ul><li>the lock never actually taken</li><li>`serve` without the lock</li><li>`serve` dropping the lock right after starting</li><li>an unopenable lock reported as "in use"</li><li>a new database with default permissions</li><li>existing state files left loose</li><li>`serve` skipping the permission step</li></ul> |
+| Not covered | Windows locking, until the operator's run. Telling a held lock from other lock errors: no test can produce the second kind. |
 
 ## Known risks and open decisions
 1. **The v5 rule is measured on fictional cases only,** 61 of them, written by the same author as the rule. Real requests may phrase approval claims in ways it misses, or trip it falsely. `review export` turns real decisions into regression cases.
@@ -159,13 +172,10 @@ Both retries succeeded, with no model failure. This is the first live confirmati
 4. **Reasoning length varies;** the retry handled both cut-offs seen in run 11.
 5. **Exported case files contain request text.** They stay under git-ignored `var/` by default; `--out` can put them elsewhere.
 6. **The cap can overshoot by one call;** the demo and eval spend caps apply per run; the cloud workspace blocks `api.meta.ai` and most third-party documentation hosts.
-7. **Still open from Checkpoint 01:** single instance per database is not enforced; the input digest is an unkeyed SHA-256; database file permissions follow the umask; the development server is `http.server`.
+7. **Still open from Checkpoint 01:** the input digest is an unkeyed SHA-256 (short messages stay guessable); the development server is `http.server`. Single-instance enforcement and POSIX file modes were closed in Checkpoint 08.
 8. **Hosting:** the operator has a domain on Cloudflare, deferred to a later checkpoint. Exposing `serve` publicly first needs a production server, TLS (for example through a Cloudflare Tunnel), per-client tokens, rate limits, single-instance enforcement and per-client spend limits.
 
 ## Next steps
-1. **Operator:** apply and commit 0.7.1.
-2. **Optional sanity check (about $0.02):** run `eval --assessor muse --case attack-amended-approval`. The eval header line should name `prompt cp07.muse-assessor.v5` without any flag.
-3. **Possible next checkpoints (operator's choice):**
-   - single-instance enforcement and the other Checkpoint 01 leftovers;
-   - real-traffic review tooling;
-   - the hosting checkpoint above.
+1. **Operator:** run the cells in the runbook in order: 0.7.1, then Checkpoint 08, then anything after it. Each cell checks the repository's content hash before applying, and stops with a message if anything differs.
+2. **Watch on the first Windows run:** `tests.test_instance`, the first execution of `msvcrt.locking`. A failure there should be pasted back for debugging.
+3. **Possible next checkpoints:** an operator review detail view (`review show`); real-traffic review tooling; hosting (deferred by the operator).
