@@ -220,9 +220,9 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("cp07.holdout.v1 - 18 cases", proc.stdout)
         self.assertEqual(run("--holdout", "--cases", str(self.tmp / "x.json")).returncode, 2)
-        proc = run("--prompt", "candidate")  # the fixture assessor has no prompt to swap
+        proc = run("--prompt", "previous")  # the fixture assessor has no prompt to swap
         self.assertEqual(proc.returncode, 2)
-        self.assertIn("--prompt candidate needs --assessor muse", proc.stderr)
+        self.assertIn("--prompt previous needs --assessor muse", proc.stderr)
         # A bad --json path is refused before anything runs, not after a paid run.
         proc = run("--json", str(self.tmp / "no-such-folder" / "out.json"))
         self.assertEqual(proc.returncode, 2)

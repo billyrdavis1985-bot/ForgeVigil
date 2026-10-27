@@ -61,8 +61,8 @@ def main(argv: list[str] | None = None) -> int:
                           help="run this case file instead of the built-in set, e.g. var/review_cases.json")
     case_set.add_argument("--holdout", action="store_true",
                           help="run the held-out cases, which measure whether a prompt change generalises")
-    evaluate.add_argument("--prompt", choices=("current", "candidate"), default="current",
-                          help="live assessor prompt: the current default, or the candidate under evaluation")
+    evaluate.add_argument("--prompt", choices=("current", "previous"), default="current",
+                          help="live assessor prompt: the current default, or the one it replaced (for comparison)")
     args = parser.parse_args(argv)
 
     if args.command == "demo":
@@ -224,14 +224,14 @@ def _eval(
     import dataclasses
 
     from .evaluation import CASES_PATH, HOLDOUT_CASES_PATH, run_evaluation
-    from .muse import CANDIDATE_PROMPT_VERSION
+    from .muse import PREVIOUS_PROMPT_VERSION
 
     problem = _unwritable_output(json_path)
     if problem:  # found now, not after a paid run
         print(f"refusing to run: {problem}", file=sys.stderr)
         return 2
-    if prompt == "candidate" and assessor != "muse":
-        print("refusing to run: --prompt candidate needs --assessor muse (the fixture assessor uses no prompt)",
+    if prompt != "current" and assessor != "muse":
+        print(f"refusing to run: --prompt {prompt} needs --assessor muse (the fixture assessor uses no prompt)",
               file=sys.stderr)
         return 2
     config = None
@@ -239,8 +239,8 @@ def _eval(
         config = _live_config()
         if config is None:
             return 2
-        if prompt == "candidate":
-            config = dataclasses.replace(config, prompt_version=CANDIDATE_PROMPT_VERSION)
+        if prompt == "previous":
+            config = dataclasses.replace(config, prompt_version=PREVIOUS_PROMPT_VERSION)
     if holdout:
         cases_path = HOLDOUT_CASES_PATH
     try:

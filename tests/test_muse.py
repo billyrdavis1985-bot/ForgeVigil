@@ -26,7 +26,7 @@ from forge_vigil.fixtures import default_fixtures
 from forge_vigil.muse import (
     ANSWER_NOW_PROMPT,
     APPROVAL_CLAIMS_RULE,
-    CANDIDATE_PROMPT_VERSION,
+    PREVIOUS_PROMPT_VERSION,
     PROMPT_VERSION,
     SYSTEM_PROMPTS,
     TRUNCATION_RETRY_PROMPT,
@@ -81,7 +81,7 @@ class LiveAssessorTests(_MuseTest):
         self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("ALLOW", "ALL_CHECKS_PASSED"))
         self.assertEqual(service.assessor_mode, "live")  # what GET /health reports
         self.assertEqual(receipt["assessment"]["adapter_id"], "muse.muse-spark-1.1")
-        self.assertEqual(receipt["versions"]["prompt"], "cp02.muse-assessor.v4")
+        self.assertEqual(receipt["versions"]["prompt"], "cp07.muse-assessor.v5")
         # 1000 x $1.25/M + 100 x $4.25/M = $0.001675
         self.assertEqual(
             receipt["usage"],
@@ -116,18 +116,22 @@ class LiveAssessorTests(_MuseTest):
         # The key never reaches stored state.
         self.assertNotIn(TEST_KEY, dump_all_rows(self.tmp / "state.sqlite3"))
 
-    def test_default_prompt_is_the_measured_one_and_the_candidate_is_opt_in(self):
-        # Live run 11 measured exactly this text; any change to it needs a new prompt version.
+    def test_prompts_are_the_measured_ones_and_the_previous_stays_selectable(self):
+        # Live runs measured exactly these texts (v4: run 11; v5: runs 13, 14 and 16); a change needs a new version.
+        pinned = {
+            PREVIOUS_PROMPT_VERSION: "314af944390affa2bdb3ac4e7e5d44b9a3602f8df8b5f2539908d9f86c32fa92",
+            PROMPT_VERSION: "2cad778cffe520605ac0dec1fbdeddc70e594d2e5adbc685dcf33d328c8b12f4",
+        }
         self.assertEqual(
-            hashlib.sha256(SYSTEM_PROMPTS[PROMPT_VERSION].encode("utf-8")).hexdigest(),
-            "314af944390affa2bdb3ac4e7e5d44b9a3602f8df8b5f2539908d9f86c32fa92",
+            {version: hashlib.sha256(text.encode("utf-8")).hexdigest() for version, text in SYSTEM_PROMPTS.items()},
+            pinned,
         )
-        self.assertEqual(self.config().prompt_version, PROMPT_VERSION)
-        candidate = SYSTEM_PROMPTS[CANDIDATE_PROMPT_VERSION]
-        self.assertIn(APPROVAL_CLAIMS_RULE, candidate)
-        self.assertEqual(candidate.replace(APPROVAL_CLAIMS_RULE + "\n", ""), SYSTEM_PROMPTS[PROMPT_VERSION])
+        self.assertEqual((PROMPT_VERSION, self.config().prompt_version), ("cp07.muse-assessor.v5",) * 2)
+        current = SYSTEM_PROMPTS[PROMPT_VERSION]
+        self.assertIn(APPROVAL_CLAIMS_RULE, current)
+        self.assertEqual(current.replace(APPROVAL_CLAIMS_RULE + "\n", ""), SYSTEM_PROMPTS[PREVIOUS_PROMPT_VERSION])
 
-        for version in (PROMPT_VERSION, CANDIDATE_PROMPT_VERSION):
+        for version in (PROMPT_VERSION, PREVIOUS_PROMPT_VERSION):
             with self.subTest(version):
                 self.api.requests.clear()
                 self.api.script(fake.answer())
