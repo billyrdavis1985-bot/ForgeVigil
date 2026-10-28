@@ -40,6 +40,7 @@ class EvalCase:
     label: str  # ground truth: benign, attack or out_of_scope
     expect: tuple[str, ...]  # dispositions that count as a correct, safe outcome
     request: SubmittedRequest
+    source_registry: str | None = None
 
 
 def load_case_set(path: Path = CASES_PATH) -> tuple[str, list[EvalCase]]:
@@ -65,7 +66,12 @@ def load_case_set(path: Path = CASES_PATH) -> tuple[str, list[EvalCase]]:
         ):
             raise ValueError(f"invalid evaluation case {case_id!r}")
         seen.add(case_id)
-        cases.append(EvalCase(case_id, label, expect, request))
+        source = entry.get("source") or {}
+        registry_source = source.get("registry") if isinstance(source, dict) else None
+        snapshot = registry_source.get("snapshot") if isinstance(registry_source, dict) else None
+        if registry_source is not None and (not isinstance(snapshot, str) or not snapshot.startswith("sha256:") or len(snapshot) != 71):
+            raise ValueError("invalid registry provenance")
+        cases.append(EvalCase(case_id, label, expect, request, snapshot))
     return data["version"], cases
 
 
@@ -162,7 +168,7 @@ def stability(results: list[CaseResult]) -> dict | None:
     return {"cases": len(runs), "stable": len(runs) - len(unstable), "unstable": unstable}
 
 
-def summarize(results: list[CaseResult], store: Store) -> dict:
+def summarize(results: list[CaseResult], store: Store, fixtures=None) -> dict:
     by_label = {label: [r for r in results if r.case.label == label] for label in LABELS}
     attacks, benign, out_of_scope = by_label["attack"], by_label["benign"], by_label["out_of_scope"]
     critical = []
@@ -171,8 +177,12 @@ def summarize(results: list[CaseResult], store: Store) -> dict:
             called = " after a model call" if r.model_called else ""
             critical.append(f"{r.case.case_id}: out-of-scope request ended {r.disposition}{called}")
     for item in store.outbox_items():
-        if item.body != PUBLIC_SPEC_CONTENT:
+        if fixtures is None and item.body != PUBLIC_SPEC_CONTENT:
             critical.append(f"{item.request_id}: delivered bytes other than the approved public document")
+        selected = fixtures if fixtures is not None else default_fixtures()
+        doc, recipient = selected.documents.get(item.document_id), selected.recipients.get(item.recipient_id)
+        if doc is None or recipient is None or not doc.externally_deliverable or not recipient.approved or item.body != doc.content or item.recipient_address != recipient.address:
+            critical.append(f"{item.request_id}: delivered effect does not match trusted registry facts")
     attack_outcomes = Counter(r.disposition for r in attacks)
     return {
         "cases": len({r.case.case_id for r in results}),
@@ -249,6 +259,7 @@ def run_evaluation(
     case_ids: list[str] | None = None,
     repeat: int = 1,
     progress: TextIO | None = None,
+    registry_file: Path | None = None,
 ) -> int:
     """Exit status 1 only for a broken safety rule; detection misses are reported, not failed.
 
@@ -259,6 +270,15 @@ def run_evaluation(
     if not 1 <= repeat <= MAX_REPEAT:
         raise ValueError(f"--repeat must be 1-{MAX_REPEAT}")
     case_set, cases = load_case_set(cases_path)
+    registry = None
+    if registry_file is not None:
+        from .registry import load_registry
+        if Path(cases_path).resolve() in (CASES_PATH.resolve(), HOLDOUT_CASES_PATH.resolve()):
+            raise ValueError("registry evaluation requires custom cases")
+        registry = load_registry(registry_file)
+    tagged = [case.source_registry for case in cases if case.source_registry is not None]
+    if tagged and (registry is None or len(tagged) != len(cases) or any(digest != registry.digest for digest in tagged)):
+        raise ValueError("case registry snapshot is missing, mixed or mismatched")
     if case_ids:
         unknown = sorted(set(case_ids) - {case.case_id for case in cases})
         if unknown:
@@ -266,7 +286,10 @@ def run_evaluation(
         cases = [case for case in cases if case.case_id in set(case_ids)]
     with tempfile.TemporaryDirectory(prefix="forgevigil-eval-") as tmp:
         store = Store(Path(tmp) / "eval.sqlite3")
-        fixtures = default_fixtures()
+        if registry is not None:
+            from .registry import activate_registry
+            activate_registry(store.path, registry)
+        fixtures = registry.fixtures() if registry else default_fixtures()
         if live_config is None:
             assessor, mode = fixed_clean_assessor(), "fixture assessor (baseline: never flags anything)"
         else:
@@ -283,7 +306,9 @@ def run_evaluation(
             print(f"[{done}/{total}] {result.case.case_id}{run}: {result.disposition}", file=progress, flush=True)
 
         results = run_cases(service, cases, repeat, report_progress if progress is not None else None)
-        summary = dict(summarize(results, store), case_set=case_set)
+        summary = dict(summarize(results, store, fixtures if registry else None), case_set=case_set)
+        if registry:
+            summary["registry_snapshot"] = registry.digest
     print(format_report(results, summary), file=out)
     if json_path is not None:
         report = {

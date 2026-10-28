@@ -143,7 +143,7 @@ class ReviewTests(unittest.TestCase):
         item = build_outbox_item(self.fixtures, "operator", "req-blocked", "public-spec", "supplier")
         forged = {"actor_id": "operator", "request_id": "req-blocked", "original_receipt_id": receipt["receipt_id"],
                   "decision": "release", "reviewer": "billy", "review_id": "rev_test", "decided_at": "t",
-                  "effect_id": item.effect_id}
+                  "effect_id": item.effect_id, "authority_at_review": receipt["authority"]}
         with self.assertRaises(ReviewRefused):  # bypassing review.decide still cannot release a BLOCK
             store.record_review(forged, item)
         with self.assertRaises(ValueError):  # a delivery needs a release decision
@@ -324,9 +324,13 @@ class ReviewTests(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         try:
             (version,) = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
+            self.assertEqual(version, "4")
+            for table in ("registry_snapshots", "registry_activations", "request_authority"):
+                self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
         finally:
             conn.close()
-        self.assertEqual(version, "3")
+        with self.assertRaises(sqlite3.ProgrammingError):
+            conn.execute("SELECT 1")
 
     def test_demo_can_finish_with_an_operator_release(self):
         out = io.StringIO()

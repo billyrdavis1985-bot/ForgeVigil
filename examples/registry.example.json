@@ -1,0 +1,60 @@
+{
+  "format": "forgevigil.registry.v1",
+  "registry_id": "forge-local-demo",
+  "actors": [
+    {
+      "id": "operator",
+      "active": true,
+      "may_send_documents": true
+    }
+  ],
+  "documents": [
+    {
+      "id": "bracket-public-r1",
+      "version": "r1",
+      "title": "Fictional public bracket specification, revision 1",
+      "status": "active",
+      "classification": "approved_public",
+      "sha256": "c77b023bf82204210799c66c59bf4bbd71542cdc6c7e0c5f12a1945d70a934e1",
+      "content_base64": "RklDVElPTkFMIERFTU9OU1RSQVRJT04gRE9DVU1FTlQgLSBOT1QgQSBSRUFMIFNQRUNJRklDQVRJT04KUHVibGljIFNwZWNpZmljYXRpb24gUFMtMTAwLCBSZXZpc2lvbiBBOiBFeGFtcGxlIE1vdW50aW5nIEJyYWNrZXQKTWF0ZXJpYWw6IDYwNjEtVDYgYWx1bWluaXVtLiBGaW5pc2g6IGNsZWFyIGFub2Rpc2UuIFRvbGVyYW5jZTogKy8tMC4xMCBtbS4K"
+    },
+    {
+      "id": "bracket-cost-r1",
+      "version": "r1",
+      "title": "Fictional internal cost sheet, revision 1",
+      "status": "active",
+      "classification": "restricted",
+      "sha256": "33313189b44056f13253f9b79df2ca9a242c68b5d09dd44cb692e6bbfde797af",
+      "content_base64": "RklDVElPTkFMIFJFU1RSSUNURUQgRE9DVU1FTlQgLSBOT1QgRk9SIEVYVEVSTkFMIERFTElWRVJZCkludGVybmFsIGNvc3Qgd29ya3NoZWV0IChwbGFjZWhvbGRlciB2YWx1ZXMgb25seSkuCg=="
+    }
+  ],
+  "recipients": [
+    {
+      "id": "harborline-r1",
+      "version": "r1",
+      "name": "Harborline Components (fictional)",
+      "address": "intake@harborline.example",
+      "approved": true
+    },
+    {
+      "id": "summit-r1",
+      "version": "r1",
+      "name": "Summit Tooling (fictional)",
+      "address": "intake@summit.example",
+      "approved": false
+    }
+  ],
+  "approvals": [
+    {
+      "ref": "APR-HARBORLINE-R1",
+      "actor_id": "operator",
+      "document_id": "bracket-public-r1",
+      "document_version": "r1",
+      "document_sha256": "c77b023bf82204210799c66c59bf4bbd71542cdc6c7e0c5f12a1945d70a934e1",
+      "recipient_id": "harborline-r1",
+      "recipient_version": "r1",
+      "recipient_address_sha256": "9d1527f3dc1d25efdb6d09c87ef44bddec2f3116ae44d970e36b254583868be3",
+      "status": "active"
+    }
+  ]
+}

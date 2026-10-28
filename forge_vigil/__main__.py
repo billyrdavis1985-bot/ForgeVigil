@@ -19,7 +19,8 @@ def main(argv: list[str] | None = None) -> int:
     serve = commands.add_parser("serve", help="run the local development server on 127.0.0.1")
     serve.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="SQLite state file")
     serve.add_argument("--port", type=int, default=8787)
-    serve.add_argument("--assessor", choices=ASSESSORS, default="fixture")
+    serve.add_argument("--assessor", choices=ASSESSORS, default=None)
+    serve.add_argument("--authority", choices=("fixture", "registry"), default="fixture")
     submit = commands.add_parser("submit", help="send one request to the local server and print the outcome")
     submit.add_argument("--document", required=True, help="document id, for example public-spec")
     submit.add_argument("--recipient", required=True, help="recipient id, for example supplier")
@@ -83,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
                           help="run this case file instead of the built-in set, e.g. var/review_cases.json")
     case_set.add_argument("--holdout", action="store_true",
                           help="run the held-out cases, which measure whether a prompt change generalises")
+    evaluate.add_argument("--registry-file", type=Path, help="trusted registry snapshot for explicit custom cases")
     evaluate.add_argument("--prompt", choices=("current", "previous"), default="current",
                           help="live assessor prompt: the current default, or the one it replaced (for comparison)")
     backup = commands.add_parser("backup", help="verified copies of the database, its key and the journal (local)")
@@ -97,6 +99,18 @@ def main(argv: list[str] | None = None) -> int:
     restore.add_argument("folder", type=Path)
     restore.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="where to restore the database")
     restore.add_argument("--journal", type=Path, default=Path("var/sent.jsonl"), help="where to restore the journal")
+    registry = commands.add_parser("registry", help="validate, activate or export operator-owned registry snapshots (local only)")
+    registry_actions = registry.add_subparsers(dest="action", required=True)
+    validate = registry_actions.add_parser("validate", help="validate a private local registry file without changing state")
+    validate.add_argument("--file", type=Path, required=True)
+    activate = registry_actions.add_parser("activate", help="activate a snapshot while the server is stopped")
+    activate.add_argument("--file", type=Path, required=True)
+    activate.add_argument("--db", type=Path, required=True)
+    activate.add_argument("--reviewer", default="operator")
+    export_registry = registry_actions.add_parser("export", help="export a retained snapshot to a new private file")
+    export_registry.add_argument("--db", type=Path, required=True)
+    export_registry.add_argument("--snapshot", required=True)
+    export_registry.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
     if args.command == "submit":
@@ -104,14 +118,42 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "demo":
         return _demo(args.assessor, args.review)
     if args.command == "eval":
-        return _eval(args.assessor, args.json, args.case_ids, args.repeat, args.cases, args.holdout, args.prompt)
+        return _eval(args.assessor, args.json, args.case_ids, args.repeat, args.cases, args.holdout, args.prompt, args.registry_file)
     if args.command == "review":
         return _review(args)
     if args.command == "report":
         return _report(args.db, args.json)
     if args.command == "backup":
         return _backup(args)
-    return _serve(args.db, args.port, args.assessor)
+    if args.command == "registry":
+        return _registry(args)
+    return _serve(args.db, args.port, args.assessor, args.authority)
+
+
+def _registry(args) -> int:
+    import sqlite3
+    from .digests import DigestKeyError
+    from .instance import InstanceLockError
+    from .registry import activate_registry, export_snapshot, load_registry
+    from .store import Store
+
+    try:
+        if args.action == "export":
+            snapshot = Store(args.db, read_only=True).registry_snapshot(args.snapshot)
+            export_snapshot(snapshot, args.out)
+            print(f"exported {snapshot.digest}; contains document bytes and destinations")
+        else:
+            snapshot = load_registry(args.file)
+            if args.action == "activate":
+                generation = activate_registry(args.db, snapshot, args.reviewer)
+                print(f"activated {snapshot.digest}, generation {generation}; document bytes retained in database")
+            else:
+                print(f"valid {snapshot.digest}; history checks run only on activation")
+    except (ValueError, RuntimeError, DigestKeyError, InstanceLockError, OSError, sqlite3.Error) as exc:
+        # RegistryError contains only code and logical field path; no rejected values.
+        print(f"registry refused: {exc}", file=sys.stderr)
+        return 2
+    return 0
 
 
 def _print_verification(verification) -> None:
@@ -238,7 +280,12 @@ def _review(args) -> int:
         return _export_case(args)
     if args.action == "show":
         return _show_case(args)
-    store = Store(args.db)
+    from .digests import DigestKeyError
+    try:
+        store = Store(args.db, read_only=args.action == "list")
+    except (RuntimeError, sqlite3.Error) as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
     if args.action == "list":
         print(format_queue(store.review_queue(), pending_only=args.pending))
         return 0
@@ -255,6 +302,9 @@ def _review(args) -> int:
     except ReviewError as exc:
         print(f"refused ({exc.code}): {exc.detail}", file=sys.stderr)
         return 1
+    except (ValueError, RuntimeError, DigestKeyError) as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
     except sqlite3.Error:
         print("failed: the database refused the write, so nothing was recorded or delivered", file=sys.stderr)
         return 1
@@ -267,14 +317,18 @@ def _show_case(args) -> int:
     import sqlite3
 
     from .fixtures import OPERATOR_ACTOR_ID
-    from .review import describe_case
+    from .review import approval_status, describe_case
+    from .fixtures import default_fixtures
+    from .digests import DigestKeyError
     from .store import Store
 
     try:
         store = Store(args.db, read_only=True)
         receipt = store.get_receipt(OPERATOR_ACTOR_ID, args.request_id)
         review = store.get_review(OPERATOR_ACTOR_ID, args.request_id)
-    except (RuntimeError, sqlite3.Error) as exc:
+        registry, _ = store.registry_state()
+        current = approval_status(registry.fixtures() if registry else default_fixtures(), receipt["approval_ref"]) if receipt else None
+    except (RuntimeError, ValueError, DigestKeyError, sqlite3.Error) as exc:
         print(f"refusing to run: {exc}", file=sys.stderr)
         return 2
     if receipt is None:
@@ -283,7 +337,7 @@ def _show_case(args) -> int:
     if args.json:
         print(json.dumps({"receipt": receipt, "review": review}, indent=2, sort_keys=True))
     else:
-        print(describe_case(receipt, review))
+        print(describe_case(receipt, review, current_approval_status=current))
     return 0
 
 
@@ -436,12 +490,16 @@ def _eval(
     cases_path: Path | None,
     holdout: bool,
     prompt: str,
+    registry_file: Path | None = None,
 ) -> int:
     import dataclasses
 
     from .evaluation import CASES_PATH, HOLDOUT_CASES_PATH, run_evaluation
     from .muse import PREVIOUS_PROMPT_VERSION
 
+    if registry_file is not None and (cases_path is None or holdout or cases_path.resolve() in (CASES_PATH.resolve(), HOLDOUT_CASES_PATH.resolve())):
+        print("refusing to run: --registry-file requires explicit custom --cases", file=sys.stderr)
+        return 2
     problem = _unwritable_output(json_path)
     if problem:  # found now, not after a paid run
         print(f"refusing to run: {problem}", file=sys.stderr)
@@ -463,13 +521,14 @@ def _eval(
         # Progress goes to the terminal only, so a redirected report stays clean.
         progress = sys.stderr if sys.stderr.isatty() else None
         return run_evaluation(live_config=config, json_path=json_path, case_ids=case_ids, repeat=repeat,
-                              cases_path=cases_path or CASES_PATH, progress=progress)
+                              cases_path=cases_path or CASES_PATH, progress=progress, registry_file=registry_file)
     except (OSError, ValueError) as exc:
         print(f"refusing to run: {exc}", file=sys.stderr)
         return 2
 
 
-def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
+def _serve(db_path: Path, port: int, assessor_kind: str | None, authority_kind: str = "fixture") -> int:
+    import sqlite3
     from .assessment import fixed_clean_assessor
     from .fixtures import OPERATOR_ACTOR_ID, default_fixtures
     from .digests import DigestKeyError
@@ -478,6 +537,10 @@ def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
     from .service import ForgeVigilService
     from .store import Store
 
+    if authority_kind == "registry" and assessor_kind is None:
+        print("refusing to start: registry authority requires explicit --assessor fixture or muse", file=sys.stderr)
+        return 2
+    assessor_kind = assessor_kind or "fixture"
     if not 1 <= port <= 65535:
         print("refusing to start: --port must be 1-65535", file=sys.stderr)
         return 2
@@ -494,27 +557,32 @@ def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
             return 2
 
     db_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    lock = InstanceLock(db_path)
     try:
+        lock = InstanceLock(db_path)
         # Before anything touches the database: startup recovery assumes no other server is using it.
         lock.acquire()
     except InstanceLockError as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
         return 2
+    db_path = lock.db_path  # key, WAL and database use the same canonical location as the lock
     try:
         secure_state_files(db_path)
         store = Store(db_path)
-        fixtures = default_fixtures()
-        if live_config is None:
-            assessor = fixed_clean_assessor()
-            mode = "fixture assessor; no model inference"
-        else:
-            from .assessment import format_usd
-            from .muse import MuseAssessor
-
-            assessor = MuseAssessor(live_config, store, fixtures)
-            mode = f"LIVE assessor {assessor.adapter_id}; spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
         try:
+            registry, _ = store.registry_state()
+            if (registry is not None) != (authority_kind == "registry"):
+                print("refusing to start: database authority does not match --authority", file=sys.stderr)
+                return 2
+            fixtures = registry.fixtures() if registry else default_fixtures()
+            if live_config is None:
+                assessor = fixed_clean_assessor()
+                mode = "fixture assessor; no model inference"
+            else:
+                from .assessment import format_usd
+                from .muse import MuseAssessor
+
+                assessor = MuseAssessor(live_config, store, fixtures)
+                mode = f"LIVE assessor {assessor.adapter_id}; spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
             service = ForgeVigilService(store, assessor, fixtures=fixtures)
         except DigestKeyError as exc:
             print(f"refusing to start: {exc}", file=sys.stderr)
@@ -530,6 +598,9 @@ def _serve(db_path: Path, port: int, assessor_kind: str) -> int:
             pass
         finally:
             server.server_close()
+    except (RuntimeError, ValueError, sqlite3.Error) as exc:
+        print(f"refusing to start: {exc}", file=sys.stderr)
+        return 2
     finally:
         lock.release()
     return 0

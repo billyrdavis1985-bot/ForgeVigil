@@ -120,8 +120,36 @@ _SCHEMA = (
     """CREATE TRIGGER IF NOT EXISTS reviews_no_delete BEFORE DELETE ON reviews
        BEGIN SELECT RAISE(ABORT, 'review decisions are append-only'); END""",
 )
-# Every upgrade so far only adds tables: 1 -> 2 the spend ledger, 2 -> 3 operator reviews.
-_MIGRATABLE_VERSIONS = (None, "1", "2", STORE_SCHEMA_VERSION)
+_SCHEMA += (
+    """CREATE TABLE IF NOT EXISTS registry_snapshots (
+        digest TEXT PRIMARY KEY, format TEXT NOT NULL, registry_id TEXT NOT NULL,
+        canonical_json TEXT NOT NULL, recorded_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS registry_activations (
+        generation INTEGER PRIMARY KEY CHECK (generation > 0), snapshot_digest TEXT NOT NULL,
+        reviewer TEXT NOT NULL, activated_at TEXT NOT NULL,
+        FOREIGN KEY (snapshot_digest) REFERENCES registry_snapshots(digest)
+    )""",
+    """CREATE TABLE IF NOT EXISTS request_authority (
+        actor_id TEXT NOT NULL, request_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('builtin', 'registry')),
+        snapshot_digest TEXT, generation INTEGER, policy_digest TEXT NOT NULL,
+        fixture_version TEXT NOT NULL, context_json TEXT,
+        PRIMARY KEY (actor_id, request_id),
+        FOREIGN KEY (actor_id, request_id) REFERENCES requests(actor_id, request_id),
+        FOREIGN KEY (snapshot_digest) REFERENCES registry_snapshots(digest),
+        FOREIGN KEY (generation) REFERENCES registry_activations(generation),
+        CHECK ((kind = 'registry' AND snapshot_digest IS NOT NULL AND generation IS NOT NULL)
+            OR (kind = 'builtin' AND snapshot_digest IS NULL AND generation IS NULL))
+    )""",
+) + tuple(
+    f"CREATE TRIGGER IF NOT EXISTS {table}_no_{action.lower()} BEFORE {action} ON {table} "
+    "BEGIN SELECT RAISE(ABORT, 'authority records are append-only'); END"
+    for table in ('registry_snapshots', 'registry_activations', 'request_authority')
+    for action in ('UPDATE', 'DELETE')
+)
+# Upgrades only add tables; old receipt/review JSON and input digests are retained.
+_MIGRATABLE_VERSIONS = (None, "1", "2", "3", STORE_SCHEMA_VERSION)
 # Which operator decisions each held disposition accepts. Only REVIEW can ever be released.
 REVIEW_DECISIONS = {"REVIEW": ("release", "reject"), "BLOCK": ("confirm", "false_positive")}
 
@@ -151,6 +179,7 @@ class Claim:
     adapter_id: str
     attempt_id: str
     received_at: str
+    origin: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -285,6 +314,7 @@ class Store:
         approval_ref: str | None,
         adapter_id: str,
         received_at: str,
+        origin: dict | None = None,
     ) -> Claim | ExistingRequest:
         """Durably record intent, or report the request that already holds this key."""
         with self._transaction() as conn:
@@ -307,6 +337,10 @@ class Store:
                     receipt=json.loads(receipt[0]) if receipt else None,
                     review=json.loads(review[0]) if review else None,
                 )
+            if origin is not None:
+                self._check_authority(conn, origin["authority"])
+            elif self._registry_in(conn)[0] is not None:
+                raise ValueError("registry intent requires its authority")
             claim = Claim(
                 actor_id=actor_id,
                 request_id=request_id,
@@ -317,6 +351,7 @@ class Store:
                 adapter_id=adapter_id,
                 attempt_id=uuid.uuid4().hex,
                 received_at=received_at,
+                origin=origin,
             )
             conn.execute(
                 f"INSERT INTO requests ({_CLAIM_COLUMNS}, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress')",
@@ -332,6 +367,15 @@ class Store:
                     claim.received_at,
                 ),
             )
+            if origin is not None:
+                authority = origin["authority"]
+                conn.execute(
+                    "INSERT INTO request_authority (actor_id, request_id, kind, snapshot_digest, generation, "
+                    "policy_digest, fixture_version, context_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (actor_id, request_id, authority["kind"], authority["snapshot"], authority["generation"],
+                     origin["policy_digest"], origin["fixture_version"],
+                     json.dumps(origin["delivery_context"], sort_keys=True) if origin["delivery_context"] else None),
+                )
         self._notify("intent_committed")
         return claim
 
@@ -343,6 +387,15 @@ class Store:
             raise ValueError("receipt effect_id does not match the outbox item")
         receipt_json = json.dumps(receipt, sort_keys=True, separators=(",", ":"))
         with self._transaction() as conn:
+            origin = self._origin(conn, claim.actor_id, claim.request_id)
+            if origin is not None and (receipt.get("authority") != origin["authority"]
+                    or receipt.get("delivery_context") != origin["delivery_context"]
+                    or receipt.get("policy_digest") != origin["policy_digest"]):
+                raise ValueError("receipt differs from durable authority")
+            if outbox is not None:
+                self._check_authority(conn, origin["authority"] if origin else None)
+                self._check_effect(conn, origin, outbox, claim.actor_id, claim.request_id,
+                                   claim.document_id, claim.recipient_id)
             updated = conn.execute(
                 "UPDATE requests SET state = 'completed', completed_at = ? "
                 "WHERE actor_id = ? AND request_id = ? AND attempt_id = ? AND state = 'in_progress'",
@@ -379,6 +432,129 @@ class Store:
                 ),
             )
         self._notify("completion_committed")
+
+    @staticmethod
+    def _registry_in(conn):
+        from .registry import RegistryError, parse_registry
+        row = conn.execute("SELECT generation, snapshot_digest FROM registry_activations ORDER BY generation DESC LIMIT 1").fetchone()
+        if row is None:
+            if conn.execute("SELECT 1 FROM registry_snapshots LIMIT 1").fetchone():
+                raise RegistryError("missing_activation")
+            return None, None
+        saved = conn.execute("SELECT canonical_json, format, registry_id FROM registry_snapshots WHERE digest = ?", (row[1],)).fetchone()
+        if saved is None:
+            raise RegistryError("missing_snapshot")
+        registry = parse_registry(saved[0].encode("utf-8"))
+        if registry.digest != row[1] or registry.canonical_json != saved[0] or registry.data["format"] != saved[1] or registry.data["registry_id"] != saved[2]:
+            raise RegistryError("corrupt_snapshot")
+        return registry, row[0]
+
+    def registry_state(self):
+        with self._reader() as conn:
+            conn.execute("BEGIN")
+            try:
+                registry, generation = self._registry_in(conn)
+                if registry:
+                    from .digests import load_key
+                    from .registry import verify_database_authority
+                    verify_database_authority(conn, load_key(self.path))
+                return registry, generation
+            finally:
+                conn.execute("ROLLBACK")
+
+    def registry_snapshot(self, digest: str):
+        from .registry import RegistryError, parse_registry
+        with self._reader() as conn:
+            row = conn.execute("SELECT canonical_json FROM registry_snapshots WHERE digest = ?", (digest,)).fetchone()
+        if row is None:
+            raise RegistryError("snapshot_not_found")
+        registry = parse_registry(row[0].encode("utf-8"))
+        if registry.digest != digest or registry.canonical_json != row[0]:
+            raise RegistryError("corrupt_snapshot")
+        return registry
+
+    def _activate_registry(self, registry, reviewer: str, now: str) -> int:
+        from .registry import RegistryError, check_successor
+        with self._transaction() as conn:
+            previous, generation = self._registry_in(conn)
+            if previous:
+                from .digests import load_key
+                from .registry import verify_database_authority
+                verify_database_authority(conn, load_key(self.path))
+                check_successor(previous, registry)
+                if registry.digest == previous.digest:
+                    return generation
+            elif conn.execute("SELECT 1 FROM requests LIMIT 1").fetchone() or conn.execute("SELECT 1 FROM spend_ledger LIMIT 1").fetchone():
+                raise RegistryError("populated_fixture_database")
+            generation = (generation or 0) + 1
+            conn.execute("INSERT OR IGNORE INTO registry_snapshots VALUES (?, ?, ?, ?, ?)",
+                         (registry.digest, registry.data["format"], registry.data["registry_id"], registry.canonical_json, now))
+            conn.execute("INSERT INTO registry_activations VALUES (?, ?, ?, ?)", (generation, registry.digest, reviewer, now))
+        return generation
+
+    @staticmethod
+    def _origin(conn, actor_id: str, request_id: str) -> dict | None:
+        row = conn.execute("SELECT kind, snapshot_digest, generation, policy_digest, fixture_version, context_json "
+                           "FROM request_authority WHERE actor_id = ? AND request_id = ?", (actor_id, request_id)).fetchone()
+        if row is None:
+            return None
+        return {"authority": {"kind": row[0], "snapshot": row[1], "generation": row[2]},
+                "policy_digest": row[3], "fixture_version": row[4],
+                "delivery_context": json.loads(row[5]) if row[5] else None}
+
+    def get_origin(self, actor_id: str, request_id: str) -> dict | None:
+        with self._reader() as conn:
+            return self._origin(conn, actor_id, request_id)
+
+    def _check_authority(self, conn, authority) -> None:
+        from .registry import authority_identity
+        registry, generation = self._registry_in(conn)
+        if authority != authority_identity(registry, generation):
+            raise ValueError("authority generation changed")
+
+    def check_origin_current(self, origin: dict) -> None:
+        with self._reader() as conn:
+            self._check_authority(conn, origin["authority"])
+
+    def _check_effect(self, conn, origin, outbox, actor_id, request_id, document_id, recipient_id) -> None:
+        import hashlib
+        from .digests import DigestKeyError, load_key
+        from .registry import delivery_context, same_context
+        if (outbox.actor_id, outbox.request_id, outbox.document_id, outbox.recipient_id) != (actor_id, request_id, document_id, recipient_id):
+            raise ValueError("outbox identity changed")
+        context = origin["delivery_context"] if origin else None
+        try:
+            key = load_key(self.path)
+        except DigestKeyError:
+            raise ValueError("digest key unavailable") from None
+        if context is None or key is None:
+            raise ValueError("missing delivery binding")
+        actual = delivery_context(key, actor_id, document_id, recipient_id, context["document_version"],
+                                  context["recipient_version"], outbox.body, outbox.recipient_address)
+        if not same_context(context, actual) or outbox.body_sha256 != hashlib.sha256(outbox.body).hexdigest():
+            raise ValueError("delivery context changed")
+        registry, _ = self._registry_in(conn)
+        if registry:
+            from .policy import scope_denial
+            from .registry import context_for
+            facts = registry.fixtures()
+            if scope_denial(facts, actor_id, document_id, recipient_id) is not None or not same_context(context, context_for(facts, key, actor_id, document_id, recipient_id, registry)):
+                raise ValueError("current scope or binding changed")
+
+    def _check_legacy_effect(self, conn, receipt, review, outbox) -> None:
+        import hashlib
+        from .fixtures import default_fixtures
+        from .policy import policy_digest, scope_denial
+        registry, _ = self._registry_in(conn)
+        fixtures = default_fixtures()
+        if registry is not None or receipt.get("policy_digest") != policy_digest(fixtures) or review.get("policy_digest") != policy_digest(fixtures):
+            raise ValueError("unproved legacy authority")
+        if scope_denial(fixtures, receipt["actor_id"], receipt["document_id"], receipt["recipient_id"]) is not None:
+            raise ValueError("legacy scope changed")
+        doc, recipient = fixtures.documents[receipt["document_id"]], fixtures.recipients[receipt["recipient_id"]]
+        if (outbox.actor_id, outbox.request_id, outbox.document_id, outbox.recipient_id, outbox.body, outbox.recipient_address, outbox.body_sha256) != (
+                receipt["actor_id"], receipt["request_id"], doc.document_id, recipient.recipient_id, doc.content, recipient.address, hashlib.sha256(doc.content).hexdigest()):
+            raise ValueError("legacy delivery changed")
 
     def get_receipt(self, actor_id: str, request_id: str) -> dict | None:
         with self._reader() as conn:
@@ -422,6 +598,17 @@ class Store:
             if conn.execute("SELECT 1 FROM reviews WHERE actor_id = ? AND request_id = ?", key).fetchone():
                 raise ReviewRefused("already_decided", "this request already has a review decision")
             if outbox is not None:
+                try:
+                    self._check_authority(conn, review.get("authority_at_review"))
+                    original = conn.execute("SELECT receipt_json FROM receipts WHERE actor_id = ? AND request_id = ?", key).fetchone()
+                    receipt = json.loads(original[0])
+                    origin = self._origin(conn, *key)
+                    if origin is None:
+                        self._check_legacy_effect(conn, receipt, review, outbox)
+                    else:
+                        self._check_effect(conn, origin, outbox, *key, receipt["document_id"], receipt["recipient_id"])
+                except (ValueError, RuntimeError) as exc:
+                    raise ReviewRefused("context_check_failed", "current authority or delivery binding changed") from exc
                 # The UNIQUE (actor_id, request_id) constraint still caps every request at one delivery.
                 conn.execute(
                     f"INSERT INTO outbox ({_OUTBOX_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -492,7 +679,7 @@ class Store:
             rows = conn.execute(
                 f"SELECT {_CLAIM_COLUMNS} FROM requests WHERE state = 'in_progress' ORDER BY received_at"
             ).fetchall()
-        return [Claim(*row) for row in rows]
+        return [Claim(*row, origin=self.get_origin(row[0], row[1])) for row in rows]
 
     def outbox_items(self) -> list[OutboxItem]:
         with self._reader() as conn:

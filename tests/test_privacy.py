@@ -57,7 +57,11 @@ class PrivacyTests(unittest.TestCase):
             with self.subTest(threat=threat):
                 receipt, store = self.assess(['request:message', f'registry:{marker}:not_found'], [marker], threat=threat)
                 self.assertNotIn(marker, dump_all_rows(store.path))
-                self.assertEqual(receipt['receipt_schema'], 'forgevigil.receipt.v5')
+                self.assertEqual(receipt['receipt_schema'], 'forgevigil.receipt.v6')
+                self.assertEqual(receipt['authority'], {'kind': 'builtin', 'snapshot': None, 'generation': None})
+                self.assertEqual(set(receipt['delivery_context']),
+                                 {'document_version', 'document_sha256', 'recipient_version', 'binding'})
+                self.assertTrue(receipt['delivery_context']['binding'].startswith('hmac-sha256:'))
                 self.assertNotIn('evidence_refs', receipt['assessment'])
                 self.assertEqual(receipt['disposition'], 'BLOCK' if threat == 'threat' else 'ALLOW')
                 self.assertEqual(receipt['assessment']['evidence_check']['refs'][1],

@@ -143,7 +143,14 @@ def export_case(
         },
     }
 
+    if (receipt.get("authority") or {}).get("kind") == "registry":
+        authority = receipt["authority"]
+        case["source"]["registry"] = {"snapshot": authority["snapshot"], "generation": authority["generation"],
+                                       "delivery_context": receipt.get("delivery_context")}
+
     cases_path = Path(cases_path)
+    if cases_path.is_symlink():
+        raise ExportError("invalid_cases_file", "the case-set destination must not be a symbolic link")
     if cases_path.exists():
         try:
             load_case_set(cases_path)
@@ -163,8 +170,20 @@ def export_case(
     # Write a sibling file and swap it in, so an interruption never leaves a half-written case set.
     cases_path.parent.mkdir(parents=True, exist_ok=True)
     partial = cases_path.with_name(cases_path.name + ".partial")
-    partial.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(partial, cases_path)
+    try:
+        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    except FileExistsError:
+        raise ExportError("export_busy", f"{partial} already exists; it was not changed") from None
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if cases_path.is_symlink():
+            raise ExportError("invalid_cases_file", "the case-set destination became a symbolic link")
+        os.replace(partial, cases_path)
+    finally:
+        partial.unlink(missing_ok=True)  # exclusive creation succeeded: only our temporary file is removed
     return case
 
 

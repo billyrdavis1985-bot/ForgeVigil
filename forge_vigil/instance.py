@@ -6,6 +6,10 @@ second server on the same file would do that to requests the first one is
 still working on. So `serve` holds an exclusive operating-system lock on a
 sibling `<db>.lock` file for as long as it runs.
 
+Database symlinks are resolved before choosing that sibling. A server uses the
+same canonical path for its key and SQLite side files. Hard-linked databases
+are refused because they have no unique sibling namespace.
+
 The operating system releases the lock when the process exits, however it
 exits, so a crash never leaves a stale lock. The lock file itself is left in
 place; deleting it would let two processes lock different files.
@@ -37,16 +41,27 @@ class InstanceLockError(Exception):
 
 
 def lock_path_for(db_path: Path) -> Path:
+    db_path = Path(db_path).resolve()
     return db_path.with_name(db_path.name + ".lock")
 
 
 class InstanceLock:
     def __init__(self, db_path: Path) -> None:
-        self.db_path = Path(db_path)
+        try:
+            self.db_path = Path(db_path).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise InstanceLockError(f"cannot resolve the database path ({exc})") from None
         self.path = lock_path_for(self.db_path)
         self._fd: int | None = None
 
     def acquire(self) -> None:
+        # Hard links have no unique pathname for SQLite's WAL, key and sibling lock.
+        # Refuse them rather than let two names form separate server identities.
+        try:
+            if self.db_path.exists() and self.db_path.stat().st_nlink > 1:
+                raise InstanceLockError("database hard links are not supported; use one canonical database path")
+        except OSError as exc:
+            raise InstanceLockError(f"cannot inspect the database ({exc.strerror})") from None
         try:
             fd = os.open(self.path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
         except OSError as exc:

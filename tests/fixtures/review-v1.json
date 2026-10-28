@@ -1,0 +1,22 @@
+{
+  "review_schema": "forgevigil.review.v1",
+  "review_id": "rev_33d45cb4a09b4811844935dc0a06f05a",
+  "request_id": "req-0001",
+  "actor_id": "operator",
+  "original_receipt_id": "rcpt_9aae430bd8ca46be874c7a2c9845acc4",
+  "original_disposition": "REVIEW",
+  "original_reason_code": "APPROVAL_MISSING",
+  "original_threat_finding": "none",
+  "decision": "reject",
+  "reviewer": "synthetic-reviewer",
+  "despite_threat": false,
+  "scope_recheck": "not_applicable",
+  "policy_digest": "sha256:51a09362aa85cab8bbe1c6ff1cb28e2e3a4dc4fef218b6b4876c08450398db1f",
+  "decided_at": "2026-10-28T13:17:29.645570Z",
+  "effect_id": null,
+  "delivered": false,
+  "versions": {
+    "code": "0.16.0",
+    "policy": "cp04.policy.v1"
+  }
+}
