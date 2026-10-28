@@ -79,6 +79,7 @@ def collect() -> dict:
             "assessment": versions.ASSESSMENT_SCHEMA_VERSION,
             "receipt": versions.RECEIPT_SCHEMA_VERSION,
             "review": versions.REVIEW_SCHEMA_VERSION,
+            "backup": versions.BACKUP_SCHEMA_VERSION,
             "store": versions.STORE_SCHEMA_VERSION,
         },
         "policy": {"version": versions.POLICY_VERSION, "digest": policy_digest(default_fixtures())},

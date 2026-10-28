@@ -1,4 +1,4 @@
-"""Command line: `python3 -m forge_vigil serve`, `submit`, `demo`, `eval`, `review` or `report`.
+"""Command line: `python3 -m forge_vigil serve`, `submit`, `demo`, `eval`, `review`, `report` or `backup`.
 
 serve, demo and eval default to the fixture assessor. `--assessor muse` uses the live Meta
 Model API and needs MODEL_API_KEY and FORGEVIGIL_SPEND_CAP_USD in the environment.
@@ -85,6 +85,18 @@ def main(argv: list[str] | None = None) -> int:
                           help="run the held-out cases, which measure whether a prompt change generalises")
     evaluate.add_argument("--prompt", choices=("current", "previous"), default="current",
                           help="live assessor prompt: the current default, or the one it replaced (for comparison)")
+    backup = commands.add_parser("backup", help="verified copies of the database, its key and the journal (local)")
+    backup_actions = backup.add_subparsers(dest="action", required=True)
+    create = backup_actions.add_parser("create", help="snapshot the database (safe while serve runs), key and journal")
+    create.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
+    create.add_argument("--journal", type=Path, default=Path("var/sent.jsonl"), help="the requester's journal")
+    create.add_argument("--to", type=Path, default=Path("var/backups"), help="folder to put the backup in")
+    check = backup_actions.add_parser("verify", help="check that a backup is complete, unaltered and restorable")
+    check.add_argument("folder", type=Path)
+    restore = backup_actions.add_parser("restore", help="put a verified backup in place; never overwrites anything")
+    restore.add_argument("folder", type=Path)
+    restore.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="where to restore the database")
+    restore.add_argument("--journal", type=Path, default=Path("var/sent.jsonl"), help="where to restore the journal")
     args = parser.parse_args(argv)
 
     if args.command == "submit":
@@ -97,7 +109,56 @@ def main(argv: list[str] | None = None) -> int:
         return _review(args)
     if args.command == "report":
         return _report(args.db, args.json)
+    if args.command == "backup":
+        return _backup(args)
     return _serve(args.db, args.port, args.assessor)
+
+
+def _print_verification(verification) -> None:
+    manifest = verification.manifest or {}
+    print(f"{verification.folder}: {'OK' if verification.ok else 'NOT USABLE'}")
+    if manifest:
+        counts = manifest.get("counts") or {}
+        labels = {"requests": "requests", "receipts": "receipts", "outbox": "outbox items", "reviews": "reviews",
+                  "spend_ledger": "spend entries"}
+        print(f"  made {manifest.get('created_at')} by {manifest.get('code_version')}: "
+              + ", ".join(f"{counts[table]} {label}" for table, label in labels.items() if table in counts))
+        print("  files: " + ", ".join(entry.get("name", "?") for entry in (manifest.get("files") or {}).values()))
+    for note in verification.notes:
+        print(f"  {note}")
+    for problem in verification.problems:
+        print(f"  PROBLEM: {problem}")
+
+
+def _backup(args) -> int:
+    import sqlite3
+
+    from .backup import BackupError, create_backup, restore_backup, verify_backup
+
+    try:
+        if args.action == "create":
+            verification = create_backup(args.db, journal_path=args.journal, backup_root=args.to)
+            _print_verification(verification)
+            print("keep a copy somewhere other than this disk; it holds the key and the journal's message text")
+            return 0
+        if args.action == "verify":
+            if not args.folder.is_dir():
+                print(f"refusing to run: {args.folder} is not a folder", file=sys.stderr)
+                return 2
+            verification = verify_backup(args.folder)
+            _print_verification(verification)
+            return 0 if verification.ok else 1
+        placed = restore_backup(args.folder, db_path=args.db, journal_path=args.journal)
+    except BackupError as exc:
+        print(f"refused ({exc.code}): {exc.detail}", file=sys.stderr)
+        return 1 if exc.code in ("backup_invalid", "backup_unverified", "copy_damaged") else 2
+    except (OSError, sqlite3.Error) as exc:
+        print(f"failed: {exc}", file=sys.stderr)
+        return 1
+    for path in placed:
+        print(f"restored {path}")
+    print(f"start the server as usual: python -m forge_vigil serve --db {args.db}")
+    return 0
 
 
 def _unwritable_output(path: Path | None) -> str | None:

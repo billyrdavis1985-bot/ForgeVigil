@@ -71,6 +71,9 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   protocol: read the rules, run the checks, answer ten questions on the safety rules, then wait for an
   assignment. `tools/handshake.py` prints a read-only report of what the repository contains, so the operator
   can confirm the agent sees the same code.
+- **Checkpoint 13:** verified backups. `backup create` snapshots the database while `serve` keeps running,
+  together with its key and the journal. It proves the key belongs to the database, and `backup restore`
+  puts a backup in place without ever overwriting anything.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -81,11 +84,12 @@ Not established yet:
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 108 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 113 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
 python3 -m forge_vigil report                    # summary of var/forgevigil.sqlite3 (read-only)
+python3 -m forge_vigil backup create             # verified backup of the database, key and journal (safe while serving)
 python3 tools/mutation_check.py                  # deliberate-defect check: do the tests catch broken rules? (minutes)
 python3 tools/handshake.py                       # what this copy contains: tree, versions, digests, counts (read-only)
 
@@ -111,7 +115,8 @@ Records from earlier versions (`sha256:`) still replay normally.
 
 **Back up `<db>.key` together with the database.** If the key goes missing while the database holds
 keyed records, `serve` refuses to start rather than minting a new key, which would make every earlier
-request look changed.
+request look changed. `backup create` copies the key together with the database (see
+[Backups](#backups-checkpoint-13)).
 
 ## Live Muse assessor (Checkpoint 02)
 
@@ -364,6 +369,33 @@ stored fingerprint. It lists the rest by reason:
 A journal entry whose text doesn't reproduce the stored fingerprint is reported as a problem and makes the
 command exit 1; nothing is exported for it. Export only reads the database.
 
+## Backups (Checkpoint 13)
+
+Everything that matters lives in three files: `var/forgevigil.sqlite3`, its key
+`var/forgevigil.sqlite3.key`, and the requester's journal `var/sent.jsonl`. `backup create` copies all
+three into a dated folder under `var/backups/`. It is safe while `serve` is running.
+
+```powershell
+.\.venv\Scripts\python.exe -m forge_vigil backup create
+.\.venv\Scripts\python.exe -m forge_vigil backup verify var\backups\forgevigil-20261028-091500-a1b2
+.\.venv\Scripts\python.exe -m forge_vigil backup restore var\backups\forgevigil-20261028-091500-a1b2
+```
+
+- **Consistent:** the database copy uses SQLite's online backup, so it is one consistent state even while
+  requests are being written. It includes commits still in the WAL, which a plain file copy can miss.
+- **Complete or absent:** the backup is built in a hidden `.partial` folder, verified, and only then
+  renamed. A backup of a database whose key is missing is refused, because it could never be restored.
+- **Verified:** `backup verify` checks every file against the manifest's SHA-256, runs SQLite's integrity
+  check, and compares row counts. It also **proves the key belongs to the database** by recomputing the
+  fingerprints of journaled requests. A backup with the wrong key is reported, not discovered after a
+  disaster. Verification writes nothing into the backup.
+- **Restore never overwrites:** if the database, its key or the journal already exist at the target, it
+  refuses and changes nothing; move them aside first. It also refuses while a server holds the
+  database's lock, verifies the backup first, and places the database last. If it fails partway, it removes
+  what it placed, so a retry starts clean.
+- **Sensitive:** a backup holds the key and the journal's message text. Folders are owner-only on Linux and
+  macOS. Copy them somewhere other than this disk, and treat them like the live state.
+
 ## API
 
 `POST /v1/requests` with `Authorization: Bearer <token>` and `Content-Type: application/json`:
@@ -437,6 +469,7 @@ and goes to REVIEW. It is never reported as forged.
 | `tests/` | system tests over real SQLite files, a real local server and a fake Model API |
 | `tools/mutation_check.py` | the deliberate-defect check: breaks each safety rule in a scratch copy and confirms a test fails |
 | `tools/handshake.py`, `HANDSHAKE.md` | the handshake for an incoming agent: a read-only state report, and the protocol around it |
+| `forge_vigil/backup.py` | `backup create`, `verify` and `restore`: consistent, verified, never-overwriting backups |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the work starts with
 [HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
