@@ -32,7 +32,8 @@
 | `550e811` | 0.12.0 | Checkpoint 12: `HANDSHAKE.md` and `tools/handshake.py`, the handshake for an incoming agent |
 | `854e7c0` | 0.12.0 | HANDOFF: Checkpoint 11 and 12 Windows results (runs 20 and 21) |
 | `4e60614` | 0.13.0 | Checkpoint 13: verified backups (`backup create`, `verify`, `restore`) |
-| this commit | 0.13.0 | HANDOFF: Checkpoint 13 Windows results (run 22) |
+| `27579d0` | 0.13.0 | HANDOFF: Checkpoint 13 Windows results (run 22) |
+| this commit | 0.13.0 | Handoff guards: scope and non-goals, the safety net only grows, high-risk files, a clean checkout in the handshake |
 
 ## What exists (0.13.0)
 - **Request path:**
@@ -78,6 +79,11 @@
   - It answers ten questions on the safety rules with file references, lists what it won't do, and waits for an assignment.
   - `tools/handshake.py` (`--json` too) reports the commit, content tree, uncommitted paths, versions, schemas, policy digest, prompt SHA-256s, case counts, test count and mutant count.
     - It writes nothing (not even bytecode), makes no network call and prints no environment value; tests check all three.
+  - **Guards, added before the first assignment:**
+    - AGENTS.md has a Scope section with non-goals, and states that the safety net only grows (counts never fall; no test or mutant is loosened without approval naming it).
+    - It lists the high-risk files, which a delivery must name and explain, and says standing approval for branch pushes and pull requests never covers merging, releases, deployment or spending.
+    - The handshake now asks for `git status --short`, because the `tree:` line describes the commit, not the working files.
+    - A test checks that every file AGENTS.md names exists.
 - **Backups (Checkpoint 13, `backup.py`):** `backup create` writes `var/backups/forgevigil-<UTC time>-<4 hex>/` with the database, its key, the journal and `manifest.json` (`forgevigil.backup.v1`: SHA-256 and size per file, row counts, versions).
   - The database copy uses SQLite's online backup, so it is consistent while `serve` writes, includes commits still in the WAL, and is converted to a single self-contained file.
   - It is built in a hidden `.partial` folder, verified, then renamed. A database with keyed records but no key is refused (`digest_key_missing`).
@@ -175,6 +181,9 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 
 ## Next steps
 1. **There is no live database on the operator's PC yet:** run 22 found no `var\forgevigil.sqlite3`. The first `serve` creates it and its key. After that, run `backup create`, copy the folder off that disk, and repeat after real traffic.
-2. **Handshake with the incoming agent:** give it access to the repository, ask it to follow `HANDSHAKE.md`, and compare its `tools/handshake.py` output and answers with the values the operator holds (an answer key kept outside the repository). Assign work only after they match.
+2. **Handshake with the incoming agent (GPT, in Codex):** it ran the handshake on `27579d0`. As the operator relayed it, it ran 113 tests and the demo, both passing, and it did not rerun the deliberate-defect check.
+   - Its two refinements became part of the guards: inspect a dirty checkout rather than trusting the tree, and remember that counts don't measure test strength.
+   - After the guards land, it needs only to pull, then show the new `tree:` line and a clean `git status --short`.
+   - Its first assignment is a read-only safety review: findings only, with no changes.
 3. **Real traffic:** send genuine requests with `submit`, decide the held ones, then run `review export --all` and `eval --cases var/review_cases.json` (risk 1).
 4. **Possible later checkpoints (operator's choice):** hosting on the operator's Cloudflare domain (deferred); digest-key rotation.

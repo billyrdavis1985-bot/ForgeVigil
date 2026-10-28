@@ -17,12 +17,19 @@ Read these in full, in this order:
 ## Step 2: run, and paste the output exactly
 ```bash
 python3 tools/handshake.py                       # what this copy contains; read-only
+git status --short                               # your working files; prints nothing when clean
 python3 -m unittest discover -s tests -t . -v    # the suite: temporary state, no network, no spend
 python3 -m forge_vigil demo                      # the smoke demo; its last line must be RESULT: PASS
 ```
 On Windows use `.\.venv\Scripts\python.exe` instead of `python3`. Paste the full output of
-`tools/handshake.py`, the last three lines of the suite, and the last line of the demo. Don't summarise or
-round them.
+`tools/handshake.py` and of `git status --short`, the last three lines of the suite, and the last line of
+the demo. Don't summarise or round them.
+
+**A clean checkout matters, not just the tree.** The `tree:` line describes the commit, not your working
+files. If `git status --short` prints anything, explain every line:
+- a tracked file (` M`, `M `, `A`, `D`, `R`) means your code differs from the commit, so the handshake
+  doesn't match until you explain or undo it;
+- `??` is an untracked file: say which ones your environment's setup created.
 
 If you cannot run commands where you are, say so plainly and ask the operator to run them and paste the
 output. Never write down output you did not see. If you cannot read the repository itself, say so too.
@@ -61,6 +68,7 @@ HANDSHAKE REPORT
 1. Read: AGENTS.md yes/no, HANDOFF.md yes/no, README.md yes/no
 2. Output:
    <tools/handshake.py output, verbatim>
+   <git status --short output, verbatim; "(clean)" if it printed nothing>
    <last three lines of the suite, verbatim>
    <last line of the demo, verbatim>
    (or: "I cannot run commands here; please run Step 2 and paste the output.")
@@ -71,7 +79,15 @@ HANDSHAKE REPORT
 
 ## After the handshake: how work is done here
 - **Scope:** one checkpoint at a time, assigned by the operator, with no architecture resets. Every change
-  either fixes a concrete defect or advances the assigned checkpoint.
+  either fixes a concrete defect or advances the assigned checkpoint. AGENTS.md's Scope section lists what
+  is out of scope, and its Safety section the rules that apply to every delivery: the safety net only
+  grows, and high-risk files are named.
+- **Every delivery summary states:**
+  - the base tree it was built on;
+  - every file changed, naming and explaining any high-risk file;
+  - the test and deliberate-defect counts before and after;
+  - any existing test or mutant that changed, and why (this needs the operator's approval naming it);
+  - ideas outside the assignment, as proposals only.
 - **A finished checkpoint has:**
   - `CODE_VERSION` bumped in `forge_vigil/versions.py`;
   - tests for the new behaviour;
@@ -79,8 +95,10 @@ HANDSHAKE REPORT
   - `README.md` and `HANDOFF.md` brought up to date, with observed facts only.
 - **Stack:** Python 3 standard library and `unittest`; no new dependencies without approval. It must stay
   green on Python 3.11, 3.12 and 3.13, and on Windows.
-- **If you cannot push:** deliver a patch built against a stated content tree (`git rev-parse "HEAD^{tree}"`),
-  plus PowerShell cells for the operator's PC (PowerShell 5.1, `C:\dev\ForgeVigil`):
+- **Delivery:** with the operator's standing approval to push branches, push one and open a pull request,
+  and never merge. Otherwise, deliver a patch built against a stated content tree
+  (`git rev-parse "HEAD^{tree}"`), plus PowerShell cells for the operator's PC (PowerShell 5.1,
+  `C:\dev\ForgeVigil`):
   - the apply cell checks the patch's SHA-256 and the starting tree before changing anything;
   - the commit cell checks the resulting tree and re-runs the tests, and commits nothing if they fail;
   - see "Windows facts" in `HANDOFF.md`, which save hours.

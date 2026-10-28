@@ -3,7 +3,7 @@
 tools/handshake.py is how the operator checks that another agent is looking at
 the same code: its report must say what the repository really contains, and it
 must stay read-only and never print an environment value. HANDSHAKE.md, the
-protocol around it, must only point at files that exist.
+protocol around it, and AGENTS.md's high-risk list must only point at files that exist.
 """
 
 from __future__ import annotations
@@ -112,7 +112,11 @@ class HandshakeTests(unittest.TestCase):
         for path in sorted(named):
             self.assertTrue((REPO_ROOT / path).exists(), path)
         self.assertEqual(len(re.findall(r"^\d+\. \*\*Q", text, flags=re.M)), 10)  # the ten questions
-        self.assertIn("HANDSHAKE.md", (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8"))  # agents are sent here
+        self.assertIn("git status --short", text)  # the tree alone doesn't show a dirty checkout
+        agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("HANDSHAKE.md", agents)  # agents are sent here
+        for path in sorted(set(re.findall(r"`([\w./-]+\.(?:py|md|json))`", agents))):
+            self.assertTrue((REPO_ROOT / path).exists(), path)  # e.g. the high-risk list still names real files
 
 
 if __name__ == "__main__":
