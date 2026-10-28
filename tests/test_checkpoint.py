@@ -234,10 +234,9 @@ class DecisionTests(_TempStateTest):
                 "status": "completed",
                 "threat_finding": "none",
                 "reason_code": "FIXTURE_FIXED_CLEAN",
-                "evidence_refs": ["fixture:fixed-clean-v1"],
                 "evidence_check": {
                     "threat_support": "not_applicable",
-                    "refs": [{"ref": "fixture:fixed-clean-v1", "result": "verified"}],
+                    "refs": [{"kind": "fixture", "relation": "other", "claim": "other", "result": "verified"}],
                     "quotes": [],
                 },
                 "validation_error": None,
@@ -379,7 +378,12 @@ class DecisionTests(_TempStateTest):
             (403, "BLOCK", "THREAT_FINDING_SUPPORTED", "verified"),
         )
         self.assertEqual(receipt["assessment"]["adapter_id"], "fixture.injected-threat.test")
-        self.assertEqual(receipt["assessment"]["evidence_refs"], ["fixture:injected-threat"])
+        self.assertNotIn("evidence_refs", receipt["assessment"])
+        self.assertEqual(receipt["assessment"]["evidence_check"], {
+            "threat_support": "verified",
+            "refs": [{"kind": "fixture", "relation": "other", "claim": "other", "result": "verified"}],
+            "quotes": [],
+        })
         self.assertEqual(harness.counts()["outbox"], 0)
 
 

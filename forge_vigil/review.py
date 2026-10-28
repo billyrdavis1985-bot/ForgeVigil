@@ -22,6 +22,8 @@ import uuid
 
 from . import policy
 from .fixtures import FixtureSet
+from .digests import DigestKeyError, load_key
+from .registry import authority_identity, context_for, same_context
 from .schema import ID_PATTERN
 from .service import build_outbox_item, utc_now
 from .store import REVIEW_DECISIONS, ReviewRefused, Store
@@ -51,6 +53,12 @@ def decide(
     receipt = store.get_receipt(actor_id, request_id)
     if receipt is None:
         raise ReviewError("not_found", f"no receipt for request {request_id}")
+    registry, generation = store.registry_state()
+    if registry is not None:
+        fixtures = registry.fixtures()
+    authority = authority_identity(registry, generation)
+    origin = store.get_origin(actor_id, request_id)
+    binding_check = "not_applicable"
     allowed = REVIEW_DECISIONS.get(receipt["disposition"])
     if allowed is None:
         raise ReviewError("not_reviewable", f"{receipt['disposition']} results are final")
@@ -68,6 +76,19 @@ def decide(
         denial = policy.scope_denial(fixtures, actor_id, receipt["document_id"], receipt["recipient_id"])
         if denial is not None:
             raise ReviewError("scope_check_failed", f"release refused by the current server data: {denial.reason_code}")
+        if origin is None:
+            if registry is not None or receipt.get("policy_digest") != policy.policy_digest(fixtures):
+                raise ReviewError("legacy_context_unknown", "original delivery facts cannot be proved")
+            binding_check = "legacy_policy_digest"
+        else:
+            try:
+                key = load_key(store.path)
+            except DigestKeyError:
+                raise ReviewError("digest_key_unavailable", "restore the original digest key before release") from None
+            if key is None or not same_context(origin["delivery_context"], context_for(
+                    fixtures, key, actor_id, receipt["document_id"], receipt["recipient_id"], registry)):
+                raise ReviewError("context_changed", "original document or destination cannot be matched; submit a new request")
+            binding_check = "matched"
         scope_recheck = "passed"
         outbox = build_outbox_item(fixtures, actor_id, request_id, receipt["document_id"], receipt["recipient_id"])
     review = {
@@ -83,6 +104,11 @@ def decide(
         "reviewer": reviewer,
         "despite_threat": decision == "release" and flagged,
         "scope_recheck": scope_recheck,
+        "authority_at_review": authority,
+        "binding_check": binding_check,
+        "current_approval_status": approval_status(fixtures, receipt["approval_ref"]),
+        "current_approval_check": policy.approval_check(fixtures, actor_id, receipt["document_id"],
+                                                        receipt["recipient_id"], receipt["approval_ref"]),
         "policy_digest": policy.policy_digest(fixtures),
         "decided_at": utc_now(),
         "effect_id": outbox.effect_id if outbox else None,
@@ -150,7 +176,14 @@ def explain_reason(code: str) -> str:
     return "no explanation recorded for this code"
 
 
-def describe_case(receipt: dict, review: dict | None) -> str:
+def approval_status(fixtures: FixtureSet, approval_ref: str | None) -> str:
+    if approval_ref is None:
+        return "missing"
+    approval = fixtures.approvals.get(approval_ref)
+    return approval.status if approval else "unverified"
+
+
+def describe_case(receipt: dict, review: dict | None, *, current_approval_status: str | None = None) -> str:
     """Everything an operator needs to decide one case, from its receipt and any decision.
 
     Receipts hold digests, never request text, so none can appear here. Every field is read
@@ -171,6 +204,13 @@ def describe_case(receipt: dict, review: dict | None) -> str:
         f"Outcome:   {disposition} {receipt.get('reason_code', '?')}, delivered: {'yes' if delivered else 'no'}",
         f"  why: {explain_reason(receipt.get('reason_code', ''))}",
     ]
+    authority = receipt.get("authority")
+    if authority:
+        lines.append(f"Authority: {authority.get('kind', '?')}, snapshot {authority.get('snapshot') or 'none'}, generation {authority.get('generation')}")
+        context = receipt.get("delivery_context")
+        lines.append("  delivery binding: " + (f"document {context.get('document_version', '?')} / {context.get('document_sha256', '?')}, recipient {context.get('recipient_version', '?')}" if context else "unknown; cannot release without proof"))
+    if current_approval_status is not None:
+        lines.append(f"  current approval status: {current_approval_status}")
     status = assessment.get("status", "?")
     if status == "not_run":
         lines.append("Model:     not called (scope checks decided before any assessment)")
@@ -183,11 +223,21 @@ def describe_case(receipt: dict, review: dict | None) -> str:
             + (f", validation error {assessment['validation_error']}" if assessment.get("validation_error") else ""),
         ]
         for ref in evidence.get("refs") or []:
-            lines.append(f"  evidence: {ref.get('ref', '?')} -> {ref.get('result', '?')}")
+            if "ref" in ref:  # v4 and earlier: preserve the historical explanation.
+                description = ref.get("ref", "?")
+            else:
+                relations = {"message": "message", "request_approval": "request's approval",
+                             "request_document": "request's document", "request_recipient": "request's recipient",
+                             "other": "other"}
+                description = (f"{ref.get('kind', '?')} ({relations.get(ref.get('relation'), 'other')}), "
+                               f"claim {ref.get('claim', 'other')}")
+            lines.append(f"  evidence: {description} -> {ref.get('result', '?')}")
         quotes = evidence.get("quotes") or []
         if quotes:
             found = sum(quote.get("result") == "verified" for quote in quotes)
-            lines.append(f"  quotes:   {found} of {len(quotes)} found in the message (stored as hashes, not text)")
+            storage = ("verification results only; no text or hashes"
+                       if receipt.get("receipt_schema") in ("forgevigil.receipt.v5", "forgevigil.receipt.v6") else "stored as hashes, not text")
+            lines.append(f"  quotes:   {found} of {len(quotes)} found in the message ({storage})")
         if diagnostics:
             finishes = ",".join(diagnostics.get("finish_reasons") or []) or "?"
             calls = (f"  calls:    {diagnostics.get('model_calls', '?')} model, {diagnostics.get('tool_calls', '?')} tool;"
@@ -205,6 +255,8 @@ def describe_case(receipt: dict, review: dict | None) -> str:
         override = " with --despite-threat" if review.get("despite_threat") else ""
         lines.append(f"Decision:  {review.get('decision', '?').replace('_', '-')}{override} by {review.get('reviewer', '?')} "
                      f"at {review.get('decided_at', '?')}{effect}")
+        if review.get("current_approval_status") is not None:
+            lines.append(f"  approval at decision: {review['current_approval_status']}; binding: {review.get('binding_check', 'unknown')}")
     elif allowed is None:
         lines.append(f"Decision:  none possible; {disposition} results are final")
     else:

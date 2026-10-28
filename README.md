@@ -74,6 +74,26 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 13:** verified backups. `backup create` snapshots the database while `serve` keeps running,
   together with its key and the journal. It proves the key belongs to the database, and `backup restore`
   puts a backup in place without ever overwriting anything.
+- **Checkpoint 14:** privacy-preserving evidence in new receipts (`forgevigil.receipt.v5`). Model-chosen
+  reference targets and quote hashes are no longer persisted. Evidence records retain the kind, a fixed
+  relation to the request, an allowlisted claim and the verification result. Existing receipts remain
+  unchanged and still replay, show, export and back up. Permission tests control their own creation mask.
+- **Checkpoint 15 (local work; Windows helper completed):** database aliases share the canonical
+  server lock and key location; hard-linked databases are refused. Restore preserves existing staging
+  files, rejects overlapping destinations before writing and never replaces a destination that appears
+  during copying. Export creates its temporary file exclusively and preserves an occupied temporary
+  path. Receipt and database schemas, policy and prompts are unchanged.
+- **Checkpoint 16 (local work; Windows helper and drill completed):** an operator readiness drill runs the
+  existing commands on disposable fixture state: submit, review, export, backup, restore and replay.
+  It checks exact outcomes, delivery identity/bytes, receipt preservation and zero model calls/spend,
+  then stops its own servers and removes the temporary state. See [OPERATOR_DRILL.md](OPERATOR_DRILL.md).
+
+- **Checkpoint 17 (local work; repaired Windows helper completed):** a validated operator registry for
+  versioned documents, recipients and exact approvals. Local activation retains complete snapshots;
+  intents/receipts pin their original delivery context, and release checks current scope plus the
+  bound bytes/destination. Store 4, receipt v6, review v2 and backup v2 preserve older records and v1
+  backups. **Registered document bytes, including restricted documents, are stored unencrypted in
+  SQLite and backups.** See [REGISTRY.md](REGISTRY.md) for file rules, activation and a disposable drill.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -81,10 +101,10 @@ Not established yet:
 - The model's own resistance to prompt injection beyond these cases.
 - Readiness for hosting.
 
-## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
+## Quick start (standard library only; Python 3.11–3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 113 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 187 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -92,6 +112,8 @@ python3 -m forge_vigil report                    # summary of var/forgevigil.sql
 python3 -m forge_vigil backup create             # verified backup of the database, key and journal (safe while serving)
 python3 tools/mutation_check.py                  # deliberate-defect check: do the tests catch broken rules? (minutes)
 python3 tools/handshake.py                       # what this copy contains: tree, versions, digests, counts (read-only)
+python3 tools/operator_drill.py                  # disposable fixture workflow, ending with restored replay and cleanup
+python3 tools/registry_drill.py                  # configured-registry workflow on fresh fictional fixture state
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -108,10 +130,26 @@ the operating system frees it when the server ends, even after a crash. On Linux
 its `-wal` and `-shm` files, the lock and the key are readable by your user only. On Windows they follow
 your profile folder's permissions.
 
-**Request fingerprints:** the database never stores message text, only a digest of each request. From
+From 0.15.0, `serve` resolves database symlinks before choosing its database, key, WAL and lock paths.
+Use that canonical database path for other operator commands too. Databases with multiple hard links
+are refused because separate names would also create separate SQLite side files.
+
+**Request fingerprints:** the request itself is stored as a digest rather than message text. From
 0.10.0 that digest is keyed (`hmac-sha256:`) with a secret in `<db>.key`, which `serve` creates on first
-start. Someone holding a copy of the database alone can't confirm a guessed message by hashing it.
-Records from earlier versions (`sha256:`) still replay normally.
+start. From 0.14.0, new receipts also remove model-supplied reference targets and unkeyed quote hashes,
+which previously exposed message text or allowed guesses about quoted text. New evidence records keep
+only fixed codes and verification results. Records from earlier versions (`sha256:` fingerprints and
+v4 or earlier receipts) still replay normally and are never rewritten: historical exposures remain in
+those records and their backups. Upgrading does not sanitize old data.
+
+**Evidence explanation without targets:** each v5 reference record contains `kind`, `relation`, `claim`
+and `result`. Relations are `message`, `request_approval`, `request_document`, `request_recipient` or
+`other`; `review show` renders them alongside the request's existing approval, document and recipient.
+Claims are restricted by kind to the facts the verifier compares: registry `not_found`, `inactive`,
+`active_binds_request`, `active_binds_other`; document `unknown`, `deliverable`, `restricted`; recipient
+`unknown`, `approved`, `unapproved`. Every other claim is stored as `other`. Quotes retain only their
+verification results, not text or hashes. `threat_support` and all permission checks are unchanged.
+The full model answer is still checked in memory; the answer format and pinned prompts are unchanged.
 
 **Back up `<db>.key` together with the database.** If the key goes missing while the database holds
 keyed records, `serve` refuses to start rather than minting a new key, which would make every earlier
@@ -167,8 +205,8 @@ At the end it prints the spend that was recorded.
    made (`ASSESSMENT_BUDGET_EXHAUSTED`). Afterwards the reservation settles to the token counts the
    provider reports. When usage is unknown, the full reservation stays counted. One call can still exceed
    its estimate (for example through hidden reasoning tokens); any overrun is recorded at its actual cost.
-6. **Receipt:** it records the adapter and prompt version, every evidence-check result (quotes as hashes
-   only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
+6. **Receipt:** it records the adapter and prompt version, every evidence-check result (v5 uses target-free
+   reference summaries and quote verification results only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
    reasons, reply field names, and whether the answer was JSON, fenced JSON, empty, cut off or prose. If
    the API refuses a call, it records the HTTP status and the error's `type`, `code` and `param`, kept only
    when each is a short identifier. The model's text and the API's error message are never stored.
@@ -222,7 +260,8 @@ While it runs, a progress line such as `[12/43] attack-role-play: BLOCK` appears
 request. Progress is shown only on a terminal, so a redirected or saved report stays clean. A bad
 `--json` path is refused before the run starts, so a paid run never fails at the end over its output file.
 
-Add `--json <path>` to save every receipt as well. Reports never contain request text or the API key.
+Add `--json <path>` to save every receipt as well. Evaluation output from new v5 receipts omits reference
+targets and quote text/hashes; historical receipts retain their original evidence format. API keys are not recorded.
 
 Each line is marked when something needs attention: `MISSED (delivered)`, `false positive`, `unexpected`,
 or `model failure (<cause>)`, where the cause is the validation error or the reply's finish reason and
@@ -266,6 +305,9 @@ deliver that case no more often than the old one over 10 runs. Both delivered it
   the database's key file for that check. UTF-8 and UTF-16 files, and
   Windows line endings, are fine.
 - **Storage:** cases go to `var/review_cases.json`, which git ignores because it contains request text.
+  A pre-existing `<cases>.partial` is refused without changing it (`export_busy`), including a symbolic
+  link. A symbolic link as the case-set destination is also refused. Newly exported files are 0600 on
+  POSIX; Windows uses folder access lists.
 
 ```powershell
 .\.venv\Scripts\python.exe -m forge_vigil review export <request_id> --message-file message.txt
@@ -344,7 +386,8 @@ the same `FORGEVIGIL_TOKEN` as the server:
 - Exit codes: 0 when the server recorded the request (decided or replayed), 1 when it refused it (for
   example 401 or 409), 2 when nothing was sent.
 
-**The requester's journal:** the server keeps no message text. So that real decisions can become
+**The requester's journal:** new server receipts omit message text and model-chosen reference targets.
+So that real decisions can become
 evaluation cases, `submit` keeps the requester's copy of each request the server recorded in
 `var/sent.jsonl`, one JSON line per request. It is appended to, ignored by git, and readable by your user
 only on Linux and macOS. Refused requests are not kept, and `--no-journal` keeps nothing. The journal holds
@@ -393,6 +436,12 @@ three into a dated folder under `var/backups/`. It is safe while `serve` is runn
   refuses and changes nothing; move them aside first. It also refuses while a server holds the
   database's lock, verifies the backup first, and places the database last. If it fails partway, it removes
   what it placed, so a retry starts clean.
+- **Restore paths:** the database, key, journal, SQLite side files, lock and staging files must have
+  separate destinations; aliases or ancestor relationships are refused before writing (`target_conflict`).
+  Existing `.<target>.restoring` files and dangling destination symlinks are preserved and refused.
+  Final publication uses an atomic create-only hard link in the destination directory; a filesystem
+  without hard-link support refuses the restore rather than falling back to overwrite. Windows/NTFS
+  validation of this change is pending.
 - **Sensitive:** a backup holds the key and the journal's message text. Folders are owner-only on Linux and
   macOS. Copy them somewhere other than this disk, and treat them like the live state.
 

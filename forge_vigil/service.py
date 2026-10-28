@@ -30,6 +30,7 @@ from .assessment import (
 from .evidence import check_evidence
 from .fixtures import FixtureSet, default_fixtures
 from .digests import digest_matches, keyed_digest, load_or_create_key
+from .registry import authority_identity, context_for
 from .schema import SubmittedRequest
 from .store import AttemptNotCurrent, Claim, ExistingRequest, OutboxItem, Store
 from .versions import (
@@ -115,7 +116,14 @@ class ForgeVigilService:
         It is loaded before anything is written, so a missing key refuses startup with nothing changed."""
         self.store = store
         self.assessor = assessor
-        self.fixtures = fixtures if fixtures is not None else default_fixtures()
+        self.registry, self.generation = store.registry_state()
+        if self.registry is not None:
+            registered = self.registry.fixtures()
+            if fixtures is not None and policy.policy_digest(fixtures) != policy.policy_digest(registered):
+                raise ValueError("fixtures differ from the database registry")
+            self.fixtures = registered
+        else:
+            self.fixtures = fixtures if fixtures is not None else default_fixtures()
         self.policy_digest = policy.policy_digest(self.fixtures)
         self._digest_key = digest_key if digest_key is not None else load_or_create_key(
             store.path, has_keyed_digests=store.has_keyed_digests()
@@ -155,6 +163,10 @@ class ForgeVigilService:
                 approval_ref=request.approval_ref,
                 adapter_id=self.adapter_id,
                 received_at=utc_now(),
+                origin={"authority": authority_identity(self.registry, self.generation),
+                        "policy_digest": self.policy_digest, "fixture_version": self.fixtures.version,
+                        "delivery_context": context_for(self.fixtures, self._digest_key, actor_id,
+                                                        request.document_id, request.recipient_id, self.registry)},
             )
         except Exception:
             return Outcome(UNAVAILABLE)  # no durable intent, so no assessment and no delivery
@@ -210,6 +222,7 @@ class ForgeVigilService:
         return receipt, outbox
 
     def _assess(self, claim: Claim, request: SubmittedRequest) -> _AssessmentRun:
+        self.store.check_origin_current(claim.origin)
         item = AssessmentInput(
             actor_id=claim.actor_id,
             attempt_id=claim.attempt_id,
@@ -273,6 +286,7 @@ class ForgeVigilService:
             document_id=claim.document_id,
             recipient_id=claim.recipient_id,
             adapter_id=self.adapter_id,
+            approval_ref=claim.approval_ref,
         )
         return _AssessmentRun(
             assessment,
@@ -281,7 +295,6 @@ class ForgeVigilService:
                 "completed",
                 assessment.threat_finding,
                 reason_code=assessment.reason_code,
-                evidence_refs=assessment.evidence_refs,
                 evidence_check=check.to_record(),
                 diagnostics=diagnostics,
             ),
@@ -296,7 +309,6 @@ class ForgeVigilService:
         threat_finding: str,
         *,
         reason_code: str | None = None,
-        evidence_refs: tuple[str, ...] = (),
         evidence_check: dict | None = None,
         validation_error: str | None = None,
         adapter_id: str | None = None,
@@ -307,7 +319,6 @@ class ForgeVigilService:
             "status": status,
             "threat_finding": threat_finding,
             "reason_code": reason_code,
-            "evidence_refs": list(evidence_refs),
             "evidence_check": evidence_check,
             "validation_error": validation_error,
             "diagnostics": diagnostics,
@@ -349,9 +360,12 @@ class ForgeVigilService:
                 "policy": POLICY_VERSION,
                 "request_schema": REQUEST_SCHEMA_VERSION,
                 "assessment_schema": ASSESSMENT_SCHEMA_VERSION,
-                "fixture": self.fixtures.version,
+                "fixture": claim.origin["fixture_version"] if claim.origin else "unknown:legacy-intent",
             },
-            "policy_digest": self.policy_digest,
+            "policy_digest": claim.origin["policy_digest"] if claim.origin else "unknown:legacy-intent",
+            "authority": claim.origin["authority"] if claim.origin else {
+                "kind": "legacy_unknown", "snapshot": None, "generation": None},
+            "delivery_context": claim.origin["delivery_context"] if claim.origin else None,
             "effect_id": effect_id,
             "delivered": effect_id is not None,
         }

@@ -29,7 +29,7 @@ from forge_vigil.fixtures import default_fixtures
 from forge_vigil.instance import InstanceLock
 from forge_vigil.review import decide
 from forge_vigil.store import Store
-from tests.support import OPERATOR_TOKEN, Harness, valid_payload
+from tests.support import OPERATOR_TOKEN, Harness, valid_payload, permission_test
 from tests.test_instance import files_held_open_under, remove_tree
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +87,7 @@ class BackupTests(unittest.TestCase):
         shutil.copytree(folder, copy)
         return copy
 
+    @permission_test
     def test_a_backup_taken_while_serving_holds_everything_and_restores(self):
         self.serve_and_submit(hold_wal=True)
         reader = self.reader

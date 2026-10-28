@@ -36,14 +36,15 @@ from pathlib import Path
 
 from .client import read_journal
 from .digests import DigestKeyError, digest_matches, is_keyed, key_path_for, load_key
-from .instance import InstanceLock, InstanceLockError, secure_state_files
+from .instance import InstanceLock, InstanceLockError, lock_path_for, secure_state_files
 from .schema import RequestValidationError, parse_request
 from .versions import BACKUP_SCHEMA_VERSION, CODE_VERSION, STORE_SCHEMA_VERSION
 
 DEFAULT_BACKUP_ROOT = Path("var/backups")
 MANIFEST_NAME = "manifest.json"
-COUNTED_TABLES = ("requests", "receipts", "outbox", "reviews", "spend_ledger")
-_OLDER_STORE_SCHEMAS = ("1", "2")  # `serve` upgrades these after a restore
+COUNTED_TABLES = ("requests", "receipts", "outbox", "reviews", "spend_ledger",
+                  "registry_snapshots", "registry_activations", "request_authority")
+_OLDER_STORE_SCHEMAS = ("1", "2", "3")  # `serve` upgrades these after a restore
 
 
 class BackupError(Exception):
@@ -76,9 +77,14 @@ def _sha256(path: Path) -> str:
 def _write_private(path: Path, data: bytes) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
     with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
+        try:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        except BaseException:
+            handle.close()  # Windows requires the handle closed before cleanup
+            path.unlink(missing_ok=True)  # exclusive creation succeeded; this call owns the file
+            raise
 
 
 def _rename(source: Path, target: Path) -> None:
@@ -116,7 +122,12 @@ def database_facts(path: Path) -> dict:
     try:
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
         row = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
-        counts = {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in COUNTED_TABLES}
+        version = row[0] if row else None
+        tables = COUNTED_TABLES if version == STORE_SCHEMA_VERSION else COUNTED_TABLES[:5]
+        existing = {name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        allowed_missing = {"1": {"reviews", "spend_ledger"}, "2": {"reviews"}}.get(version, set())
+        counts = {table: (0 if table not in existing and table in allowed_missing else
+                         conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
         keyed = conn.execute(
             "SELECT 1 FROM requests WHERE input_digest LIKE 'hmac-sha256:%' LIMIT 1").fetchone() is not None
         receipts = [json.loads(text) for (text,) in conn.execute("SELECT receipt_json FROM receipts")]
@@ -180,7 +191,7 @@ def verify_backup(folder: Path) -> Verification:
         result.problems.append(f"{MANIFEST_NAME} cannot be read ({exc})")
         return result
     files = manifest.get("files") if isinstance(manifest, dict) else None
-    if not isinstance(manifest, dict) or manifest.get("format") != BACKUP_SCHEMA_VERSION or not isinstance(files, dict):
+    if not isinstance(manifest, dict) or manifest.get("format") not in ("forgevigil.backup.v1", BACKUP_SCHEMA_VERSION) or not isinstance(files, dict):
         result.problems.append(f"{MANIFEST_NAME} is not a {BACKUP_SCHEMA_VERSION} manifest")
         return result
     result.manifest = manifest
@@ -208,7 +219,7 @@ def verify_backup(folder: Path) -> Verification:
     database = present["database"]
     try:
         facts = database_facts(database)
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, ValueError, TypeError) as exc:
         result.problems.append(f"database: cannot be read as a ForgeVigil store ({exc})")
         return result
     if facts["integrity"] != "ok":
@@ -217,9 +228,13 @@ def verify_backup(folder: Path) -> Verification:
         result.notes.append(f"database: store schema {facts['store_schema']}; serve upgrades it after a restore")
     elif facts["store_schema"] != STORE_SCHEMA_VERSION:
         result.problems.append(f"database: unknown store schema {facts['store_schema']!r}")
+    expected_format = BACKUP_SCHEMA_VERSION if facts["store_schema"] == STORE_SCHEMA_VERSION else "forgevigil.backup.v1"
+    if manifest.get("format") != expected_format or manifest.get("store_schema") != facts["store_schema"]:
+        result.problems.append("database: backup format and store schema do not match")
     if facts["counts"] != manifest.get("counts"):
         result.problems.append("database: row counts differ from the manifest")
 
+    key = None
     if "key" in present:
         if present["key"].name != key_path_for(database).name:
             result.problems.append(f"key: named {present['key'].name}, but this database needs {key_path_for(database).name}")
@@ -235,6 +250,17 @@ def verify_backup(folder: Path) -> Verification:
             result.notes.append("key: well-formed; no journal in this backup to confirm it belongs to the database")
     elif facts["keyed_digests"]:
         result.problems.append("key: the database has keyed fingerprints but the backup has no key; serve could not start")
+    if facts["store_schema"] == STORE_SCHEMA_VERSION:
+        from .registry import verify_database_authority
+        conn = sqlite3.connect(database.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
+        try:
+            confirmed = verify_database_authority(conn, key)
+            if confirmed:
+                result.notes.append(f"key: confirmed against {confirmed} pinned delivery context(s)")
+        except (ValueError, TypeError, KeyError, sqlite3.Error):
+            result.problems.append("database: registry history or delivery bindings are invalid")
+        finally:
+            conn.close()
     return result
 
 
@@ -269,7 +295,7 @@ def create_backup(db_path: Path, *, journal_path: Path | None, backup_root: Path
             files["journal"] = partial / Path(journal_path).name
             _write_private(files["journal"], Path(journal_path).read_bytes())
         manifest = {
-            "format": BACKUP_SCHEMA_VERSION,
+            "format": BACKUP_SCHEMA_VERSION if facts["store_schema"] == STORE_SCHEMA_VERSION else "forgevigil.backup.v1",
             "created_at": created_at,
             "code_version": CODE_VERSION,
             "store_schema": facts["store_schema"],
@@ -294,6 +320,23 @@ def create_backup(db_path: Path, *, journal_path: Path | None, backup_root: Path
     return verification
 
 
+def _check_restore_paths(targets: dict[str, Path], files: dict) -> list[Path]:
+    """Reject aliases/ancestors between destinations, SQLite side files, lock and staging files."""
+    db = targets["database"]
+    paths = [db, targets["key"], db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm"),
+             lock_path_for(db)]
+    if "journal" in files:
+        paths.append(targets["journal"])
+    stages = [target.with_name(f".{target.name}.restoring") for role, target in targets.items() if role in files]
+    compared = [path.resolve() for path in paths + stages]
+    for index, path in enumerate(compared):
+        for other in compared[index + 1:]:
+            if path == other or path in other.parents or other in path.parents:
+                raise BackupError("target_conflict", "restore destinations, side files and staging paths must "
+                                                    "be separate (nothing was changed)")
+    return stages
+
+
 def restore_backup(folder: Path, *, db_path: Path, journal_path: Path) -> list[Path]:
     """Place a verified backup at db_path (and its key and journal). Never overwrites. Returns what was placed."""
     verification = verify_backup(folder)
@@ -302,11 +345,12 @@ def restore_backup(folder: Path, *, db_path: Path, journal_path: Path) -> list[P
     files = verification.manifest["files"]
     db_path, journal_path = Path(db_path), Path(journal_path)
     targets = {"database": db_path, "key": key_path_for(db_path), "journal": journal_path}
+    stages = _check_restore_paths(targets, files)
     guarded = [db_path, db_path.with_name(db_path.name + "-wal"), db_path.with_name(db_path.name + "-shm"),
-               key_path_for(db_path)] + ([journal_path] if "journal" in files else [])
+               key_path_for(db_path)] + ([journal_path] if "journal" in files else []) + stages
 
     def refuse_existing() -> None:
-        existing = [str(path) for path in guarded if path.exists()]
+        existing = [str(path) for path in guarded if path.exists() or path.is_symlink()]
         if existing:
             raise BackupError("target_exists", f"would overwrite {', '.join(existing)}; move them aside first "
                                                "(nothing was changed)")
@@ -328,15 +372,20 @@ def restore_backup(folder: Path, *, db_path: Path, journal_path: Path) -> list[P
                     continue
                 source, target = Path(folder) / files[role]["name"], targets[role]
                 staging = target.with_name(f".{target.name}.restoring")
-                staging.unlink(missing_ok=True)
+                owned = False
                 try:
                     _write_private(staging, source.read_bytes())
+                    owned = True
                     if _sha256(staging) != files[role]["sha256"]:
                         raise BackupError("copy_damaged", f"{target} did not copy intact; nothing was left in place")
-                    _rename(staging, target)
+                    try:
+                        os.link(staging, target)  # atomic create-only publication; never replace a late arrival
+                    except FileExistsError:
+                        raise BackupError("target_appeared", f"{target} appeared during restore; it was preserved") from None
+                    placed.append(target)
                 finally:
-                    staging.unlink(missing_ok=True)
-                placed.append(target)
+                    if owned:
+                        staging.unlink(missing_ok=True)
         except BaseException:
             # All or nothing: remove only what this restore placed. Those paths were proved absent under the lock.
             for path in placed:

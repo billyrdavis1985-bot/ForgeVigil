@@ -1,0 +1,54 @@
+{
+  "receipt_schema": "forgevigil.receipt.v5",
+  "receipt_id": "rcpt_9aae430bd8ca46be874c7a2c9845acc4",
+  "request_id": "req-0001",
+  "actor_id": "operator",
+  "received_at": "2026-10-28T13:17:29.644448Z",
+  "completed_at": "2026-10-28T13:17:29.644827Z",
+  "input_digest": "hmac-sha256:10ea4dc45cb4ee624e5508893c959d10cd83ab8e6473f434d8dd46830fe9a85a",
+  "document_id": "public-spec",
+  "recipient_id": "supplier",
+  "approval_ref": null,
+  "approval_check": "missing",
+  "assessment": {
+    "adapter_id": "fixture.fixed-clean.v1",
+    "status": "completed",
+    "threat_finding": "none",
+    "reason_code": "FIXTURE_FIXED_CLEAN",
+    "evidence_check": {
+      "threat_support": "not_applicable",
+      "refs": [
+        {
+          "kind": "fixture",
+          "relation": "other",
+          "claim": "other",
+          "result": "verified"
+        }
+      ],
+      "quotes": []
+    },
+    "validation_error": null,
+    "diagnostics": null
+  },
+  "disposition": "REVIEW",
+  "reason_code": "APPROVAL_MISSING",
+  "fallback_state": "none",
+  "usage": {
+    "status": "zero",
+    "reason": "fixture_mode_no_paid_inference",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": "0.00"
+  },
+  "versions": {
+    "code": "0.16.0",
+    "prompt": "none:fixture-mode",
+    "policy": "cp04.policy.v1",
+    "request_schema": "forgevigil.request.v1",
+    "assessment_schema": "forgevigil.assessment.v3",
+    "fixture": "cp01.fixtures.v1"
+  },
+  "policy_digest": "sha256:51a09362aa85cab8bbe1c6ff1cb28e2e3a4dc4fef218b6b4876c08450398db1f",
+  "effect_id": null,
+  "delivered": false
+}

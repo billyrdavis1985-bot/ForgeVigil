@@ -32,7 +32,7 @@ from forge_vigil.review_cases import ExportError, export_case
 from forge_vigil.schema import parse_request
 from forge_vigil.service import CONFLICT, REPLAYED, ForgeVigilService
 from forge_vigil.store import Store
-from tests.support import OPERATOR_TOKEN, dump_all_rows, valid_payload
+from tests.support import OPERATOR_TOKEN, dump_all_rows, valid_payload, permission_test
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 THREAT = {**FIXTURE_CLEAN_OUTPUT, "threat_finding": "threat", "reason_code": "INJECTED_TEST_THREAT",
@@ -61,6 +61,7 @@ class DigestTests(unittest.TestCase):
     def submit(self, service: ForgeVigilService, **overrides):
         return service.submit("operator", request(**overrides))
 
+    @permission_test
     def test_the_database_alone_cannot_confirm_a_guessed_message(self):
         receipt = self.submit(self.service()).receipt
         self.assertRegex(receipt["input_digest"], r"^hmac-sha256:[0-9a-f]{64}$")
