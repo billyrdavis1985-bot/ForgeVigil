@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import http.client
+from functools import wraps
 import json
+import os
 import socket
 import sqlite3
 import threading
@@ -17,6 +19,25 @@ from forge_vigil.store import Store
 # Synthetic test-only credentials; not used anywhere outside the test suite.
 OPERATOR_TOKEN = "test-operator-" + "a" * 40
 OTHER_TOKEN = "test-contractor-" + "b" * 40
+
+
+def permission_test(test):
+    """Exercise application permissions, never protection supplied by a parent umask.
+
+    unittest executes these tests serially. Their file-creating child processes
+    inherit the controlled mask; restoration happens even after an assertion.
+    Windows uses access lists, so its behaviour is unchanged.
+    """
+    @wraps(test)
+    def controlled(*args, **kwargs):
+        if os.name != "posix":
+            return test(*args, **kwargs)
+        previous = os.umask(0)
+        try:
+            return test(*args, **kwargs)
+        finally:
+            os.umask(previous)
+    return controlled
 
 
 def valid_payload(**overrides) -> dict:

@@ -1,8 +1,8 @@
 # HANDOFF: ForgeVigil
 
 ## Session and authority
-- **Who decides:** Billy Davis (operator) assigns checkpoints and approves every commit (see AGENTS.md). All commits are authored and pushed by the operator as `Billy Davis <…noreply…>`, with no attribution trailers.
-- **How changes ship:** the cloud session cannot push (403), so each change is delivered as a patch plus guarded PowerShell cells.
+- **Who decides:** Billy Davis (operator) assigns checkpoints and approves every commit (see AGENTS.md). Commits use `Billy Davis <…noreply…>`, with no attribution trailers. For Checkpoint 14, the operator authorized branch `cp14-privacy` and a pull request, never a merge, deployment or spending.
+- **How changes shipped before Checkpoint 14:** the prior cloud session could not push (403), so changes were delivered as patches plus guarded PowerShell cells.
   - Apply cells check the patch's SHA-256 and the repository's content tree hash before changing anything.
   - Commit cells re-run the test suite and refuse unless it passes.
 - **When:** 2026-10-26 (Checkpoints 02 to 07) and 2026-10-27 to 2026-10-28 (0.7.1 to Checkpoint 13), America/New_York.
@@ -33,9 +33,9 @@
 | `854e7c0` | 0.12.0 | HANDOFF: Checkpoint 11 and 12 Windows results (runs 20 and 21) |
 | `4e60614` | 0.13.0 | Checkpoint 13: verified backups (`backup create`, `verify`, `restore`) |
 | `27579d0` | 0.13.0 | HANDOFF: Checkpoint 13 Windows results (run 22) |
-| this commit | 0.13.0 | Handoff guards: scope and non-goals, the safety net only grows, high-risk files, a clean checkout in the handshake |
+| `9c4bde8` | 0.13.0 | Handoff guards: scope and non-goals, the safety net only grows, high-risk files, a clean checkout in the handshake |
 
-## What exists (0.13.0)
+## What exists (0.14.0 on cp14-privacy; Windows validation pending)
 - **Request path:**
   - An authenticated local HTTP request is checked against the strict schema, then recorded as a durable intent.
   - It then gets an advisory assessment and a deterministic policy decision. Only `policy.py` can produce ALLOW.
@@ -53,6 +53,19 @@
     - `cp07.muse-assessor.v5`, the default: v4 plus `APPROVAL_CLAIMS_RULE`;
     - `cp02.muse-assessor.v4`, still selectable as `eval --prompt previous`.
 - **False-positive check (`evidence.py`):** a threat blocks only if code confirms every quote and cited fact. Otherwise it is held for REVIEW. An unknown approval reference is uncertainty, never proof of manipulation on its own.
+- **Receipt privacy (Checkpoint 14):** new `forgevigil.receipt.v5` records retain only evidence kind,
+  target relation, allowlisted claim and verification result. Relations identify the message, the request's
+  approval/document/recipient, or other; they never retain the model's target. Claims are the finite facts
+  compared by that kind of evidence; anything else becomes `other`. Quotes retain results/counts only,
+  without text or hashes. The duplicate raw `assessment.evidence_refs` field is absent. Full references
+  and quotes are verified in memory; `threat_support`, the model answer format and both prompt hashes are unchanged.
+  - SQLite store schema stays 3. v3/v4 synthetic fixtures produced by the base implementation still replay,
+    render in the CLI, export with the original digest scheme and survive backup/restore unchanged.
+  - Old receipts are append-only and are not sanitized. Any old target text or guessable quote hash remains
+    in an old receipt and its backups. The operator reports that the PC has no live database yet, so no
+    real message was stored in a v4 receipt there.
+  - POSIX permission tests temporarily set their own permissive umask, restored even on failure. This makes
+    loose-mode mutants visible under restrictive parent masks; the application's permission logic is unchanged.
 - **Spend:** each call's worst-case cost is reserved in SQLite against the cap before the call. It settles to the reported usage. A call with unknown usage keeps its full reservation, and in-flight reservations become unknown at restart.
 - **Request fingerprints (Checkpoint 10, `digests.py`):** the database stores a digest of each request, never its message.
   - New digests are `hmac-sha256:`, keyed with 32 random bytes in `<db>.key`. The key file is hex, owner-only on POSIX, and git-ignored.
@@ -102,7 +115,7 @@
   - On POSIX the database, `-wal`, `-shm`, lock and key files are 0600.
   - `review` and `report` take no lock, by design.
 - **Deliberate-defect tool (`tools/mutation_check.py`):**
-  - Each of 101 entries breaks one rule in a scratch copy and runs the test that must notice. 6 are POSIX-only and are skipped elsewhere.
+  - Each of 108 entries breaks one rule in a scratch copy and runs the test that must notice. 7 are POSIX-only and are skipped elsewhere.
   - Before planting anything, it requires every referenced test to pass on the unmodified copy.
   - `tests/test_mutation_tool.py` keeps every anchor and test name valid, also on a CRLF checkout, and runs the tool end to end.
 
@@ -155,6 +168,49 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 | Stacked patch | Applied to GitHub's `854e7c0` in throwaway clones with `core.autocrlf` false and true: identical content trees both ways, and the suite passed in each. (In Checkpoint 10 the same check caught a real Windows bug, now covered by `test_anchors_match_a_windows_checkout`.) |
 | Not covered | <ul><li>Telling a held lock from other lock errors.</li><li>Read-only opens: a writable open would change nothing on a current-schema database, so no test can tell.</li><li>Two `submit` runs writing the journal at the same instant.</li><li>A Windows file held open for more than 5 s during a backup's or restore's rename.</li><li>Very large databases: `backup verify` reads every receipt into memory.</li></ul> |
 
+## Checkpoint 14: observed evidence and review findings
+- Base: commit `9c4bde85b3a7c7aebc61a0c05c17b08964562c2a`, tree
+  `ae6117978ac554a1c7e7d685042a934baa66858d`. Work is on `cp14-privacy`, not merged.
+- The operator approved the v5 design before implementation: closed claims, request relations,
+  unchanged threat_support and unchanged model answer format/prompts.
+- New regression assertions failed on the base for persisted targets, unkeyed quote hashes, unlisted
+  claims and the umask-077 permission blind spot. The synthetic v3/v4 compatibility test passed on
+  the base. The base log is `/tmp/cp14-base-regressions.log` in the review session; errors from tests
+  expecting the new shape are not counted as independent safety reproductions.
+- Linux: Python 3.12.14 / SQLite 3.53.1 and Python 3.13 each ran 122 tests, OK. The fixture demo ended
+  `RESULT: PASS`. No live model call or paid inference occurred.
+- Full mutation runs under inherited umask 022 and 077 each ended `108 of 108 caught`, exit 0.
+  The earlier base review ended `98 of 101 caught`: its inherited restrictive mask concealed three
+  permission mutants. Application permission code is unchanged; the tests now control their mask.
+- Safety net: 113 -> 122 tests, 101 -> 108 deliberate defects. All 101 old mutant definitions are
+  unchanged, including the three evidence.py anchors. Both pinned prompt hashes are unchanged.
+- The exact receipt assertions in test_checkpoint.py's ALLOW and injected-threat tests and test_muse.py's
+  tool-result test now check v5 summaries. test_review.py's held-case explanation checks the exact new
+  line and target absence. All existing disposition/delivery/evidence/command assertions remain.
+  Five existing permission tests now run under a controlled permissive mask; their assertions remain.
+- Windows validation is pending. Expected there: 122 tests, OK (skipped=3); 101 of 101 mutants caught,
+  7 POSIX-only skipped. These are expectations, not observed Windows results. The operator reports that
+  the PC has no live database yet, so no real message was stored in a v4 receipt there. Legacy test
+  fixtures are synthetic. They exercise original-receipt replay, CLI show, export and backup/restore.
+- Delivery access: GitHub read access succeeded. The authorized branch push was rejected using the
+  existing session credential through the GitHub CLI credential helper. The GitHub API request was
+  denied at proxy CONNECT (403); api.github.com is absent from the enforced allowlist. A draft adding
+  only that hostname was saved for environment-settings review; it does not activate access. No pull
+  request was created. Local commit/bundle delivery is available while remote delivery is blocked.
+
+| Review finding, reproduced on the base | Status |
+|---|---|
+| 1. Model-supplied reference targets persist message text | Fixed in 0.14.0 for new receipts: fixed summaries; raw references removed |
+| 2. Unkeyed quote hashes permit database-only message guessing | Fixed in 0.14.0 for new receipts: quote results/counts only |
+| 3. Database aliases allow two serve processes on one database | Open for Checkpoint 15; locking/path implementation unchanged |
+| 4. Restore deletes an unrelated pre-existing .restoring file | Open for Checkpoint 15; restore implementation unchanged |
+| 5. Export follows a .partial symlink and overwrites another file | Open for Checkpoint 15; export implementation unchanged |
+| 6. Overlapping restore destinations overwrite the restored journal | Open for Checkpoint 15; restore target validation unchanged |
+| 7. Inherited umask conceals permission mutants | Fixed in 0.14.0: permission tests control and restore a permissive POSIX mask |
+
+Historical receipts remain append-only. Findings 1 and 2 may remain in older records and their backups;
+there is no retroactive sanitization. Findings 3-6 are confirmed open defects, not proposals.
+
 ## Known risks and open decisions
 1. **All 61 evaluation cases are fictional and share an author with the policy and prompt rules.** Real decisions turned into cases with `review export` are the independent check, and there are none yet.
 2. **Verdicts vary occasionally,** and delivery of an attack carrying a *valid* approval depends on the model alone.
@@ -181,9 +237,8 @@ Cost figures are estimates: reported tokens at $1.25 and $4.25 per million; Meta
 
 ## Next steps
 1. **There is no live database on the operator's PC yet:** run 22 found no `var\forgevigil.sqlite3`. The first `serve` creates it and its key. After that, run `backup create`, copy the folder off that disk, and repeat after real traffic.
-2. **Handshake with the incoming agent (GPT, in Codex):** it ran the handshake on `27579d0`. As the operator relayed it, it ran 113 tests and the demo, both passing, and it did not rerun the deliberate-defect check.
-   - Its two refinements became part of the guards: inspect a dirty checkout rather than trusting the tree, and remember that counts don't measure test strength.
-   - After the guards land, it needs only to pull, then show the new `tree:` line and a clean `git status --short`.
-   - Its first assignment is a read-only safety review: findings only, with no changes.
+2. **Checkpoint 14 delivery:** the operator accepted the handshake on `9c4bde8`, accepted the seven-finding
+   read-only review, and assigned findings 1, 2 and 7 only. Windows validation and operator approval gate
+   the merge. Findings 3-6 remain for Checkpoint 15; none was started here.
 3. **Real traffic:** send genuine requests with `submit`, decide the held ones, then run `review export --all` and `eval --cases var/review_cases.json` (risk 1).
 4. **Possible later checkpoints (operator's choice):** hosting on the operator's Cloudflare domain (deferred); digest-key rotation.

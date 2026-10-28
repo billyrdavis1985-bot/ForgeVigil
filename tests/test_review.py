@@ -251,12 +251,13 @@ class ReviewTests(unittest.TestCase):
             "Outcome:   REVIEW APPROVAL_UNVERIFIED, delivered: no",
             "  why: the approval reference is not in the registry, so it cannot be confirmed",
             "  finding: threat (APPROVAL_MANIPULATION), status completed",
-            "  evidence: fixture:injected-threat -> verified",
+            "  evidence: fixture (other), claim other -> verified",
             "Decision:  pending; allowed: release or reject",
             "  python -m forge_vigil review release req-flagged --reviewer <you> --despite-threat",
             "  python -m forge_vigil review reject req-flagged --reviewer <you>",
         ):
             self.assertIn(line, shown.stdout.splitlines())
+        self.assertNotIn("fixture:injected-threat", shown.stdout)
         self.assertEqual(dump_all_rows(self.db_path), before)  # show is read-only
 
         self.decide("req-flagged", "release", despite_threat=True)
@@ -284,6 +285,15 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(missing.returncode, 1)
         self.assertIn("not found", missing.stderr)
         self.assertEqual(self.cli("show", "req-blocked", db=self.tmp / "missing.sqlite3").returncode, 2)
+
+    def test_show_still_renders_a_v4_receipt(self):
+        receipt = json.loads((Path(__file__).with_name('fixtures') / 'receipt-v4.json').read_text())
+        text = describe_case(receipt, None)
+        self.assertIn('evidence: request:message -> verified', text)
+        self.assertIn('1 of 1 found in the message (stored as hashes, not text)', text)
+        self.assertIn('Outcome:   BLOCK THREAT_FINDING_SUPPORTED, delivered: no', text)
+        self.assertIn('Decision:  pending; allowed: confirm or false-positive', text)
+        self.assertNotIn('review release', text)
 
     def test_show_tolerates_receipts_from_older_versions(self):
         sparse = {"request_id": "req-old", "disposition": "REVIEW", "reason_code": "APPROVAL_MISSING",

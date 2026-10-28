@@ -74,17 +74,23 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 - **Checkpoint 13:** verified backups. `backup create` snapshots the database while `serve` keeps running,
   together with its key and the journal. It proves the key belongs to the database, and `backup restore`
   puts a backup in place without ever overwriting anything.
+- **Checkpoint 14:** privacy-preserving evidence in new receipts (`forgevigil.receipt.v5`). Model-chosen
+  reference targets and quote hashes are no longer persisted. Evidence records retain the kind, a fixed
+  relation to the request, an allowlisted claim and the verification result. Existing receipts remain
+  unchanged and still replay, show, export and back up. Permission tests control their own creation mask.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
   the same author as the policy, is still small, and verdicts vary between runs.
 - The model's own resistance to prompt injection beyond these cases.
 - Readiness for hosting.
+- Review findings 3-6 remain open for Checkpoint 15: database aliases can bypass the server lock, and
+  restore/export have staging-file and target-collision defects. See HANDOFF's review-status table.
 
 ## Quick start (standard library only; tested on Python 3.11, 3.12 and 3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 113 system tests; temporary state, no network, no spend
+python3 -m unittest discover -s tests -t . -v   # 122 system tests; temporary state, no network, no spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -108,10 +114,22 @@ the operating system frees it when the server ends, even after a crash. On Linux
 its `-wal` and `-shm` files, the lock and the key are readable by your user only. On Windows they follow
 your profile folder's permissions.
 
-**Request fingerprints:** the database never stores message text, only a digest of each request. From
+**Request fingerprints:** the request itself is stored as a digest rather than message text. From
 0.10.0 that digest is keyed (`hmac-sha256:`) with a secret in `<db>.key`, which `serve` creates on first
-start. Someone holding a copy of the database alone can't confirm a guessed message by hashing it.
-Records from earlier versions (`sha256:`) still replay normally.
+start. From 0.14.0, new receipts also remove model-supplied reference targets and unkeyed quote hashes,
+which previously exposed message text or allowed guesses about quoted text. New evidence records keep
+only fixed codes and verification results. Records from earlier versions (`sha256:` fingerprints and
+v4 or earlier receipts) still replay normally and are never rewritten: historical exposures remain in
+those records and their backups. Upgrading does not sanitize old data.
+
+**Evidence explanation without targets:** each v5 reference record contains `kind`, `relation`, `claim`
+and `result`. Relations are `message`, `request_approval`, `request_document`, `request_recipient` or
+`other`; `review show` renders them alongside the request's existing approval, document and recipient.
+Claims are restricted by kind to the facts the verifier compares: registry `not_found`, `inactive`,
+`active_binds_request`, `active_binds_other`; document `unknown`, `deliverable`, `restricted`; recipient
+`unknown`, `approved`, `unapproved`. Every other claim is stored as `other`. Quotes retain only their
+verification results, not text or hashes. `threat_support` and all permission checks are unchanged.
+The full model answer is still checked in memory; the answer format and pinned prompts are unchanged.
 
 **Back up `<db>.key` together with the database.** If the key goes missing while the database holds
 keyed records, `serve` refuses to start rather than minting a new key, which would make every earlier
@@ -167,8 +185,8 @@ At the end it prints the spend that was recorded.
    made (`ASSESSMENT_BUDGET_EXHAUSTED`). Afterwards the reservation settles to the token counts the
    provider reports. When usage is unknown, the full reservation stays counted. One call can still exceed
    its estimate (for example through hidden reasoning tokens); any overrun is recorded at its actual cost.
-6. **Receipt:** it records the adapter and prompt version, every evidence-check result (quotes as hashes
-   only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
+6. **Receipt:** it records the adapter and prompt version, every evidence-check result (v5 uses target-free
+   reference summaries and quote verification results only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
    reasons, reply field names, and whether the answer was JSON, fenced JSON, empty, cut off or prose. If
    the API refuses a call, it records the HTTP status and the error's `type`, `code` and `param`, kept only
    when each is a short identifier. The model's text and the API's error message are never stored.
@@ -222,7 +240,8 @@ While it runs, a progress line such as `[12/43] attack-role-play: BLOCK` appears
 request. Progress is shown only on a terminal, so a redirected or saved report stays clean. A bad
 `--json` path is refused before the run starts, so a paid run never fails at the end over its output file.
 
-Add `--json <path>` to save every receipt as well. Reports never contain request text or the API key.
+Add `--json <path>` to save every receipt as well. Evaluation output from new v5 receipts omits reference
+targets and quote text/hashes; historical receipts retain their original evidence format. API keys are not recorded.
 
 Each line is marked when something needs attention: `MISSED (delivered)`, `false positive`, `unexpected`,
 or `model failure (<cause>)`, where the cause is the validation error or the reply's finish reason and
@@ -344,7 +363,8 @@ the same `FORGEVIGIL_TOKEN` as the server:
 - Exit codes: 0 when the server recorded the request (decided or replayed), 1 when it refused it (for
   example 401 or 409), 2 when nothing was sent.
 
-**The requester's journal:** the server keeps no message text. So that real decisions can become
+**The requester's journal:** new server receipts omit message text and model-chosen reference targets.
+So that real decisions can become
 evaluation cases, `submit` keeps the requester's copy of each request the server recorded in
 `var/sent.jsonl`, one JSON line per request. It is appended to, ignored by git, and readable by your user
 only on Linux and macOS. Refused requests are not kept, and `--no-journal` keeps nothing. The journal holds

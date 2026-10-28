@@ -273,6 +273,7 @@ class ForgeVigilService:
             document_id=claim.document_id,
             recipient_id=claim.recipient_id,
             adapter_id=self.adapter_id,
+            approval_ref=claim.approval_ref,
         )
         return _AssessmentRun(
             assessment,
@@ -281,7 +282,6 @@ class ForgeVigilService:
                 "completed",
                 assessment.threat_finding,
                 reason_code=assessment.reason_code,
-                evidence_refs=assessment.evidence_refs,
                 evidence_check=check.to_record(),
                 diagnostics=diagnostics,
             ),
@@ -296,7 +296,6 @@ class ForgeVigilService:
         threat_finding: str,
         *,
         reason_code: str | None = None,
-        evidence_refs: tuple[str, ...] = (),
         evidence_check: dict | None = None,
         validation_error: str | None = None,
         adapter_id: str | None = None,
@@ -307,7 +306,6 @@ class ForgeVigilService:
             "status": status,
             "threat_finding": threat_finding,
             "reason_code": reason_code,
-            "evidence_refs": list(evidence_refs),
             "evidence_check": evidence_check,
             "validation_error": validation_error,
             "diagnostics": diagnostics,

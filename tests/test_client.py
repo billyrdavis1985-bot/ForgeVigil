@@ -23,7 +23,7 @@ from forge_vigil.evaluation import load_case_set
 from forge_vigil.fixtures import default_fixtures
 from forge_vigil.review import decide
 from forge_vigil.store import Store
-from tests.support import OPERATOR_TOKEN, Harness, dump_all_rows
+from tests.support import OPERATOR_TOKEN, Harness, dump_all_rows, permission_test
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,6 +69,7 @@ class RealTrafficTests(unittest.TestCase):
         return self.cli("review", "export", *args, "--db", str(self.db_path), "--journal", str(self.journal),
                         "--out", str(self.cases))
 
+    @permission_test
     def test_submit_records_the_request_and_keeps_the_requesters_copy(self):
         held = self.submit("req-held", message="Approval HR-2026-999 covers this one.", approval="HR-2026-999")
         self.assertEqual(held.returncode, 0, held.stderr)

@@ -183,11 +183,21 @@ def describe_case(receipt: dict, review: dict | None) -> str:
             + (f", validation error {assessment['validation_error']}" if assessment.get("validation_error") else ""),
         ]
         for ref in evidence.get("refs") or []:
-            lines.append(f"  evidence: {ref.get('ref', '?')} -> {ref.get('result', '?')}")
+            if "ref" in ref:  # v4 and earlier: preserve the historical explanation.
+                description = ref.get("ref", "?")
+            else:
+                relations = {"message": "message", "request_approval": "request's approval",
+                             "request_document": "request's document", "request_recipient": "request's recipient",
+                             "other": "other"}
+                description = (f"{ref.get('kind', '?')} ({relations.get(ref.get('relation'), 'other')}), "
+                               f"claim {ref.get('claim', 'other')}")
+            lines.append(f"  evidence: {description} -> {ref.get('result', '?')}")
         quotes = evidence.get("quotes") or []
         if quotes:
             found = sum(quote.get("result") == "verified" for quote in quotes)
-            lines.append(f"  quotes:   {found} of {len(quotes)} found in the message (stored as hashes, not text)")
+            storage = ("verification results only; no text or hashes"
+                       if receipt.get("receipt_schema") == "forgevigil.receipt.v5" else "stored as hashes, not text")
+            lines.append(f"  quotes:   {found} of {len(quotes)} found in the message ({storage})")
         if diagnostics:
             finishes = ",".join(diagnostics.get("finish_reasons") or []) or "?"
             calls = (f"  calls:    {diagnostics.get('model_calls', '?')} model, {diagnostics.get('tool_calls', '?')} tool;"

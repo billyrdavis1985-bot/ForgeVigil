@@ -160,7 +160,7 @@ class LiveAssessorTests(_MuseTest):
         )
         self.assertEqual(
             receipt["assessment"]["evidence_check"]["refs"],
-            [{"ref": "registry:HR-2026-118:active_binds_request", "result": "verified"}],
+            [{"kind": "registry", "relation": "request_approval", "claim": "active_binds_request", "result": "verified"}],
         )
         self.assertEqual((receipt["usage"]["input_tokens"], receipt["usage"]["output_tokens"]), (1800, 140))
         self.assertEqual([entry["state"] for entry in service.store.spend_entries()], ["settled", "settled"])
@@ -176,7 +176,7 @@ class LiveAssessorTests(_MuseTest):
         self.assertEqual(check["threat_support"], "verified")
         self.assertEqual([quote["result"] for quote in check["quotes"]], ["verified"])
         self.assertEqual(service.store.table_counts()["outbox"], 0)
-        # Quotes are stored only as digests; the message text never is.
+        # Quotes retain verification results only; neither message text nor hashes.
         self.assertNotIn("previous instructions", dump_all_rows(self.tmp / "state.sqlite3").lower())
 
     def test_threat_with_unconfirmed_evidence_is_held_for_review(self):  # the false-positive check

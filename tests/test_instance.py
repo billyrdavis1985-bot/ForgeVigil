@@ -21,7 +21,7 @@ from pathlib import Path
 
 from forge_vigil.instance import InstanceLock, InstanceLockError, lock_path_for, secure_state_files
 from forge_vigil.store import Store
-from tests.support import OPERATOR_TOKEN
+from tests.support import OPERATOR_TOKEN, permission_test
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -170,6 +170,7 @@ class InstanceLockTests(unittest.TestCase):
         self.assertIn("another ForgeVigil server is already using", proc.stderr)
         self.assertFalse(self.db_path.exists())  # refused before the database was opened
 
+    @permission_test
     def test_a_running_server_holds_the_lock_until_it_ends(self):
         first_port, second_port = free_port(), free_port()
         first = self.serve(first_port)
@@ -199,6 +200,7 @@ class InstanceLockTests(unittest.TestCase):
         self.assertNotIn("already using", str(caught.exception))
 
     @unittest.skipUnless(os.name == "posix", "POSIX file modes; Windows uses the folder's access list")
+    @permission_test
     def test_state_files_are_owner_only(self):
         secure_state_files(self.db_path)
         self.assertEqual(stat.S_IMODE(self.db_path.stat().st_mode), 0o600)

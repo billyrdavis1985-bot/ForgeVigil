@@ -1,0 +1,60 @@
+{
+  "actor_id": "operator",
+  "approval_check": "verified",
+  "approval_ref": "HR-2026-118",
+  "assessment": {
+    "adapter_id": "muse.synthetic-legacy",
+    "diagnostics": null,
+    "evidence_check": {
+      "quotes": [
+        {
+          "result": "verified",
+          "sha256": "908e3c9156f352f240d64fbd9c9c61c9c4a25fe3c830700dbe0e7df05ee8fcc7"
+        }
+      ],
+      "refs": [
+        {
+          "ref": "request:message",
+          "result": "verified"
+        }
+      ],
+      "threat_support": "verified"
+    },
+    "evidence_refs": [
+      "request:message"
+    ],
+    "reason_code": "SOCIAL_ENGINEERING",
+    "status": "completed",
+    "threat_finding": "threat",
+    "validation_error": null
+  },
+  "completed_at": "2026-10-28T01:41:34.545127Z",
+  "delivered": false,
+  "disposition": "BLOCK",
+  "document_id": "public-spec",
+  "effect_id": null,
+  "fallback_state": "none",
+  "input_digest": "sha256:f8f310ec814aee860f0519d34e1c52fdae30801ac79fcfd9096a177c01367a95",
+  "policy_digest": "sha256:51a09362aa85cab8bbe1c6ff1cb28e2e3a4dc4fef218b6b4876c08450398db1f",
+  "reason_code": "THREAT_FINDING_SUPPORTED",
+  "receipt_id": "rcpt_f5431b60ee154727aa2c14ddc1e810dd",
+  "receipt_schema": "forgevigil.receipt.v3",
+  "received_at": "2026-10-28T01:41:34.544724Z",
+  "recipient_id": "supplier",
+  "request_id": "req-0001",
+  "usage": {
+    "cost_usd": "0.00",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reason": "fixture_mode_no_paid_inference",
+    "status": "zero"
+  },
+  "versions": {
+    "assessment_schema": "forgevigil.assessment.v3",
+    "code": "0.9.0",
+    "fixture": "cp01.fixtures.v1",
+    "policy": "cp04.policy.v1",
+    "prompt": "none:fixture-mode",
+    "request_schema": "forgevigil.request.v1"
+  }
+}
