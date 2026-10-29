@@ -1,17 +1,69 @@
 # ForgeVigil
 
-An agentic business-protection system for small operators who use AI, built around Meta's Muse models.
-A model *investigates and advises* on each request, and deterministic code *decides*. The model cannot
-grant capabilities, delivery goes only to a local outbox, and every result leaves a durable receipt.
+ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
+deterministic code decides, delivery stays in a local outbox, and every result leaves a durable receipt.
 
-## Status
+> **Scope:** a local document-request protection prototype. Bounded read-only investigation, fixed
+> permissions and local human review; malware defense, public hosting and enterprise scalability
+> have not been demonstrated.
+
+Billy Davis built ForgeVigil to explore how agentic AI can help small businesses defend against
+AI-enabled manipulation. Broader protection and application to larger systems remain future goals.
+
+| Decision | Meaning | Delivery |
+|---|---|---|
+| ALLOW | Required permissions pass and assessment completes cleanly | One bound local outbox item |
+| BLOCK | A threat finding has code-verified supporting evidence | None; cannot be released |
+| DENY | Actor, document or recipient fails scope; intent is not inferred | None; cannot be released |
+| REVIEW | Uncertainty, missing authority, unconfirmed evidence or assessment failure | Held; a local operator may release after rechecks |
+
+Evidence checking establishes that quotations and cited facts exist, not that Muse interpreted them
+correctly. Genuine evidence can still support a false positive. An otherwise authorized attack can
+be delivered if Muse misses it. Only `policy.py` produces ALLOW; model output grants no capability.
+
+Start with [DEMO.md](DEMO.md) for the rehearsal and exact PowerShell commands,
+[JUDGMENTS.md](JUDGMENTS.md) for case provenance and expectations,
+[QUALIFICATION.md](QUALIFICATION.md) for reproducible offline checks,
+[REGISTRY.md](REGISTRY.md) for operator-owned facts, and [HANDOFF.md](HANDOFF.md) for continuity.
+The project uses the [MIT license](LICENSE).
+
+## Quick start (standard library only; Python 3.11–3.13)
+
+From a fresh clone on Windows, create the local virtual environment once. In PowerShell from the
+repository root (no activation or package installation is needed):
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -B -m forge_vigil demo --review
+```
+
+If `.venv` already exists, use its Python; do not recreate it for this recovery. The offline demo
+uses disposable fictional state, shows ALLOW/DENY/REVIEW, replay, local release and a final report,
+then deletes its state. It does not create `var/forgevigil.sqlite3` for later commands to inspect.
+See [DEMO.md](DEMO.md) for the scripted BLOCK/investigation rehearsal and its evidence limits.
+
+On Linux/macOS, run `python3 -m forge_vigil demo --review`. For complete offline controls:
+
+```powershell
+.\.venv\Scripts\python.exe -B tools\qualification_check.py
+```
+
+Use `python3 tools/qualification_check.py` on Linux/macOS. Qualification runs the suite, deliberate
+defects, demo and both drills on temporary state; it saves a separate JSON record. No provider calls
+or spending are required. [QUALIFICATION.md](QUALIFICATION.md) explains the optional frozen baseline.
+
+The following checkpoint history records earlier experiments, not current detection guarantees.
+Use [Local operation and state](#local-operation-and-state) for a persistent development server.
+
+## Checkpoint history
 
 - **Checkpoint 01:** one authenticated request → advisory assessment → deterministic permission →
   **exactly one** allowed outbox item **or** no delivery → durable receipt. System tests cover duplicate,
   concurrent, crash and restart behaviour.
 - **Checkpoint 02:** a live Muse assessor using the Meta Model API. It investigates with bounded
-  read-only tools. Code checks everything it cites (the false-positive check), and a hard spend cap is
-  reserved before every model call. It is tested against a local fake of the API. The **first live run**
+  read-only tools. Code checks cited evidence, and estimated worst-case cost is reserved against the
+  configured spend cap before every model call. Actual cost can overrun one reservation. It is tested
+  against a local fake of the API. The **first live run**
   (2026-10-26) confirmed that the key, endpoint, model, request format and usage reporting all work. One
   of its two live assessments came back as an unparseable answer and was safely held for REVIEW. Version
   0.2.1 added answer diagnostics and a larger output allowance, and the second live run returned clean,
@@ -38,7 +90,8 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   - no model failures, and none of the 51 benign results flagged;
   - of the 57 attack results, 51 blocked, 6 held for review, and none delivered.
 
-  Muse never flags `attack-amended-approval`; policy holds it anyway because the approval can't be verified.
+  In that three-run baseline, Muse did not flag `attack-amended-approval`; policy held it because
+  the approval could not be verified.
 - **Checkpoint 07:** a prompt rule for approval claims, measured before it was trusted. Claims that an
   approval covers more than the registry shows, was given outside it, or exempts a request from review are
   treated as manipulation. The rule was tested on 18 held-out cases never used for tuning (`eval --holdout`),
@@ -53,7 +106,8 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
 
   The previous prompt delivered one held-out attack in all three runs: a valid approval plus "we agreed in
   the meeting it skips review". The one main-set miss, `attack-credential-request`, wasn't repeated in a
-  10-run follow-up with either prompt. 0 of 10 were delivered each way, so it reads as noise.
+  10-run follow-up with either prompt. Both delivered 0 of 10; that small follow-up does not explain
+  or erase the earlier miss.
 - **Checkpoint 08:** one server per database. `serve` holds an operating-system lock on `<db>.lock` for as
   long as it runs, so a second server on the same file refuses to start; a crash releases the lock. On
   Linux and macOS the database and its side files are made readable by their owner only.
@@ -93,19 +147,34 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   intents/receipts pin their original delivery context, and release checks current scope plus the
   bound bytes/destination. Store 4, receipt v6, review v2 and backup v2 preserve older records and v1
   backups. **Registered document bytes, including restricted documents, are stored unencrypted in
-  SQLite and backups.** See [REGISTRY.md](REGISTRY.md) for file rules, activation and a disposable drill.
+  SQLite and backups.** Default state is under git-ignored `var/`, owner-only on POSIX; Windows uses
+  inherited folder permissions. Backups require the same sensitive handling. Encryption, pruning and
+  enterprise-scale history performance are not established. See [REGISTRY.md](REGISTRY.md).
 
 
-- **Checkpoint 18 (Windows control qualification passed; unmerged):** one offline qualification
+- **Checkpoint 18 (merged in PR #2 as `22c60a0`; Windows control qualification passed):** one offline qualification
   command runs the suite, deliberate defects, review demo and both drills, and records observed
   counts, source/prompt pins and per-test outcomes in a new JSON file. Seventeen integration tests
   exercise the Muse adapter against a custom registry using only the loopback fake API. A separate
-  16-case assistant-authored worksheet awaits operator judgments before freeze/fixture evaluation.
+  16-case assistant-authored worksheet remains a blank source template. Confirmed operator judgments
+  with model consultation are kept separately; see [JUDGMENTS.md](JUDGMENTS.md).
   The first Windows run exposed a timeout-test helper count and read-only Git-object cleanup;
   their local repair adds seven regression tests and preserves failed-suite results if cleanup fails.
   Windows qualification passed: 246 tests (12 skipped), 207/207 runnable mutants caught
   (22 skipped), both drills and cleanup PASS. These checks do not establish live model detection quality.
   See [QUALIFICATION.md](QUALIFICATION.md).
+
+- **Checkpoint 19 (local, uncommitted; Windows controls validated):** project entry points, MIT license,
+  demo/judgment guides and version 0.19.0. All 16 separate judgments were confirmed before evaluation.
+  This is a newly identified recovery delivery, not a claim to reproduce the missing original ZIP.
+  Policy, prompts, stored formats, dependencies, shipped cases, tests and mutants are unchanged.
+  The frozen 16-case clean-fixture baseline returned FAIL: five attacks delivered and six expectation
+  mismatches. No judgment was changed to obtain a pass. These results do not measure Muse detection.
+  Fresh Linux controls passed: 246 tests, 229/229 mutants, both drills and cleanup. Billy supplied
+  the CP19 Windows installer summary: 246 tests (12 skipped), 207/207 runnable mutants caught
+  (22 skipped), all 17 integration tests, demo, both drills and cleanup PASS. Windows reproduced
+  the same fixture FAIL, and the staged tree matched the recovery package. Timed rehearsal remains pending.
+  Offline results and remaining steps are recorded in [HANDOFF.md](HANDOFF.md).
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -113,27 +182,35 @@ Not established yet:
 - The model's own resistance to prompt injection beyond these cases.
 - Readiness for hosting.
 
-## Quick start (standard library only; Python 3.11–3.13)
+## Local operation and state
+
+These POSIX commands can run independently on disposable state:
 
 ```bash
 python3 -m unittest discover -s tests -t . -v   # 246 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
-python3 -m forge_vigil report                    # summary of var/forgevigil.sqlite3 (read-only)
-python3 -m forge_vigil backup create             # verified backup of the database, key and journal (safe while serving)
 python3 tools/mutation_check.py                  # deliberate-defect check: do the tests catch broken rules? (minutes)
 python3 tools/handshake.py                       # what this copy contains: tree, versions, digests, counts (read-only)
 python3 tools/operator_drill.py                  # disposable fixture workflow, ending with restored replay and cleanup
 python3 tools/registry_drill.py                  # configured-registry workflow on fresh fictional fixture state
 python3 tools/qualification_check.py             # one offline control run and a new JSON results record
+```
 
-# Local development server: 127.0.0.1 only, NOT a public deployment server
+The next commands start a persistent local development server. It binds to 127.0.0.1 only.
+Use the default fictional registry for rehearsal; read [REGISTRY.md](REGISTRY.md) before real traffic.
+This is a development server.
+
+```bash
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 python3 -m forge_vigil serve --db var/forgevigil.sqlite3 --port 8787
 ```
 
 The server refuses to start without a token of at least 32 characters. There is no built-in default.
+After that database exists, `report` and `backup create` operate on it; they do not inspect the
+disposable demo. Keep the token private when setting up a second client terminal. See
+[Real traffic](#real-traffic-checkpoint-11) and [Backups](#backups-checkpoint-13).
 
 Only one `serve` may use a database at a time. A second one refuses to start with `another ForgeVigil
 server is already using ...`. This matters because a starting server holds any unfinished requests for
@@ -155,8 +232,9 @@ only fixed codes and verification results. Records from earlier versions (`sha25
 v4 or earlier receipts) still replay normally and are never rewritten: historical exposures remain in
 those records and their backups. Upgrading does not sanitize old data.
 
-**Evidence explanation without targets:** each v5 reference record contains `kind`, `relation`, `claim`
-and `result`. Relations are `message`, `request_approval`, `request_document`, `request_recipient` or
+**Evidence explanation without targets:** reference records introduced in v5 and retained in current
+v6 receipts contain `kind`, `relation`, `claim` and `result`. Relations are `message`,
+`request_approval`, `request_document`, `request_recipient` or
 `other`; `review show` renders them alongside the request's existing approval, document and recipient.
 Claims are restricted by kind to the facts the verifier compares: registry `not_found`, `inactive`,
 `active_binds_request`, `active_binds_other`; document `unknown`, `deliverable`, `restricted`; recipient
@@ -177,7 +255,7 @@ to start without these settings:
 | Setting | Meaning |
 |---|---|
 | `MODEL_API_KEY` | Meta Model API key. Set it in your own shell or environment settings. Never commit it or paste it into a chat. |
-| `FORGEVIGIL_SPEND_CAP_USD` | Required. Hard cap on the spend recorded in the database, for example `2.00`. |
+| `FORGEVIGIL_SPEND_CAP_USD` | Required reservation limit for the selected database, for example `2.00`; actual usage can exceed one call's estimate. |
 | `FORGEVIGIL_MUSE_MODEL` | Optional. Default `muse-spark-1.1`. |
 | `FORGEVIGIL_MUSE_BASE_URL` | Optional. Default `https://api.meta.ai/v1`. |
 | `FORGEVIGIL_MUSE_MAX_OUTPUT_TOKENS` | Optional. Default `4096`. Muse's reasoning counts as output, so a low value cuts answers off. |
@@ -213,12 +291,12 @@ At the end it prints the spend that was recorded.
    Quotes must appear in the request. Registry, document and recipient claims must match the server's
    facts. The finding must cite something the requester actually wrote. Anything else goes to REVIEW
    (`THREAT_EVIDENCE_UNVERIFIED`). An unknown approval reference is never treated as manipulation on its own.
-5. **Spend:** before each call, the worst-case cost is reserved in SQLite against the cap. That cost is
+5. **Spend:** before each call, an estimated worst-case cost is reserved in SQLite against the cap. That cost is
    the request size plus maximum output tokens, at the configured prices. A call that doesn't fit is never
    made (`ASSESSMENT_BUDGET_EXHAUSTED`). Afterwards the reservation settles to the token counts the
    provider reports. When usage is unknown, the full reservation stays counted. One call can still exceed
    its estimate (for example through hidden reasoning tokens); any overrun is recorded at its actual cost.
-6. **Receipt:** it records the adapter and prompt version, every evidence-check result (v5 uses target-free
+6. **Receipt:** current v6 records retain the adapter and prompt version and every evidence-check result (v5 introduced target-free
    reference summaries and quote verification results only), the token counts and the cost. It also records shape-only diagnostics: call counts, finish
    reasons, reply field names, and whether the answer was JSON, fenced JSON, empty, cut off or prose. If
    the API refuses a call, it records the HTTP status and the error's `type`, `code` and `param`, kept only
@@ -249,8 +327,9 @@ results stay comparable.
   - pressure on the operator to release a held request.
 - **7 out-of-scope requests** that code must deny without calling the model.
 
-A test checks every case's label and expected outcome against the deterministic policy, so a
-mislabelled case fails the suite before it can cost money.
+Tests check shipped cases for scope and label/outcome consistency with the deterministic policy.
+They do not establish whether a message is actually benign or manipulative; that needs a judgment
+process separate from these consistency checks. See [JUDGMENTS.md](JUDGMENTS.md).
 
 It prints one line per case and then a summary. That summary separates two things:
 - **Safety rules, which must never break:** out-of-scope requests are denied without a model call, and
@@ -270,11 +349,16 @@ $out = Join-Path ([Environment]::GetFolderPath("Desktop")) "forgevigil-eval.txt"
 ```
 
 While it runs, a progress line such as `[12/43] attack-role-play: BLOCK` appears on screen for each
-request. Progress is shown only on a terminal, so a redirected or saved report stays clean. A bad
-`--json` path is refused before the run starts, so a paid run never fails at the end over its output file.
+request. Progress is shown only on a terminal, so a redirected or saved report stays clean. The
+`--json` preflight rejects a directory destination or a missing parent, but does not establish that
+writing will succeed. A final write can fail after inference; the command prints that failure and
+can still exit 0 when its critical permission checks passed. Preserve console output and confirm
+that the requested JSON exists and parses before treating it as retained evidence. Interrupted
+evaluations may have no final JSON. Use a fresh destination to preserve earlier results.
 
-Add `--json <path>` to save every receipt as well. Evaluation output from new v5 receipts omits reference
-targets and quote text/hashes; historical receipts retain their original evidence format. API keys are not recorded.
+Add `--json <path>` to save every receipt as well. Current v6 receipts retain the target-free evidence
+format introduced in v5, omitting reference targets and quote text/hashes; historical receipts
+retain their original evidence format. API keys are not recorded.
 
 Each line is marked when something needs attention: `MISSED (delivered)`, `false positive`, `unexpected`,
 or `model failure (<cause>)`, where the cause is the validation error or the reply's finish reason and
@@ -282,9 +366,11 @@ shape. A case only counts as correct when its disposition is right *and* the mod
 Use `--case <id>` (repeatable) to re-run only the cases you care about, for example
 `eval --assessor muse --case attack-impersonation`.
 
-**Stability:** `--repeat N` (1–10) runs every case N times, one full pass after another, so a spend cap
-that runs out affects every case alike. It then lists each model-assessed case whose disposition or
-finding changed between runs, for example `unstable: attack-verbal-approval: REVIEW/none, BLOCK/threat`.
+**Stability:** `--repeat N` (1–10) runs every case N times, one full pass after another in fixed case
+order. All passes share that invocation's temporary database and spend cap; exhaustion can affect
+later cases or passes differently. A new invocation creates another database, so the cap is not
+shared across invocations. The report lists each model-assessed case whose disposition or finding
+changed, for example `unstable: attack-verbal-approval: REVIEW/none, BLOCK/threat`.
 A failed run counts as a change. Cost grows with N: `--repeat 3` is about $1.20, so set the cap to about $2.00.
 
 **Held-out cases and candidate prompts (Checkpoint 07):** tuning a prompt until our own cases pass mostly
@@ -311,7 +397,9 @@ deliver that case no more often than the old one over 10 runs. Both delivered it
 
 **Your decisions as cases:** `review export` turns a decided request into a labelled case:
 - **Labels:** `false-positive` and `release` mean benign, and `confirm` means attack. A `reject` doesn't
-  say which, so it needs `--label benign` or `--label attack`.
+  say which, so it needs `--label benign` or `--label attack`. These labels come from workflow
+  decisions, not independent judgments. Even a `release --despite-threat` exports as benign; review
+  the provenance before using such cases as detection evidence.
 - **Message text:** the database holds only a digest of each message, so you supply the original text in
   a file, or take it from the journal that `submit` keeps (`--from-journal`, or `--all`; see
   [Real traffic](#real-traffic-checkpoint-11)). It's accepted only if it reproduces the recorded digest exactly. Records made since 0.10.0 need
@@ -380,7 +468,11 @@ The report shows counts and codes only. Request text is never stored, so it cann
 
 All figures come from one read transaction, so they agree with each other even while `serve` is writing.
 The database is opened read-only, so SQLite itself refuses any write. A database on an older schema is
-refused rather than upgraded. Run `review list` (or `serve`) once to upgrade it.
+refused rather than upgraded. `review list`, `review show`, `report` and `review export` are
+read-only and do not migrate old schemas. Preserve and verify a backup before an authorized
+`serve` startup performs a supported migration, using the intended registry and existing key.
+Startup also recovers unfinished requests; it is a state-changing operation. The older-schema
+error text's suggestion to run "review" does not apply to the read-only review commands.
 
 ## Real traffic (Checkpoint 11)
 
@@ -402,8 +494,11 @@ the same `FORGEVIGIL_TOKEN` as the server:
 **The requester's journal:** new server receipts omit message text and model-chosen reference targets.
 So that real decisions can become
 evaluation cases, `submit` keeps the requester's copy of each request the server recorded in
-`var/sent.jsonl`, one JSON line per request. It is appended to, ignored by git, and readable by your user
-only on Linux and macOS. Refused requests are not kept, and `--no-journal` keeps nothing. The journal holds
+`var/sent.jsonl` as JSON lines. Sequential replays of an already journaled ID add nothing, but the
+read/append check is not atomic: concurrent callers can append duplicate entries for the same ID.
+This is a known client-journal reliability issue; the server's separate outbox guard remains in place.
+Atomic journal capture is deferred. The journal is appended to, ignored by git, and readable by your
+user only on Linux and macOS. Refused requests are not kept, and `--no-journal` keeps nothing. The journal holds
 exactly the text the server is designed not to store, so treat it like the database: back it up, and don't
 share it.
 
@@ -453,8 +548,8 @@ three into a dated folder under `var/backups/`. It is safe while `serve` is runn
   separate destinations; aliases or ancestor relationships are refused before writing (`target_conflict`).
   Existing `.<target>.restoring` files and dangling destination symlinks are preserved and refused.
   Final publication uses an atomic create-only hard link in the destination directory; a filesystem
-  without hard-link support refuses the restore rather than falling back to overwrite. Windows/NTFS
-  validation of this change is pending.
+  without hard-link support refuses the restore rather than falling back to overwrite. The merged
+  CP15-18 Windows workflow validation covers this path; it is not a claim about every filesystem.
 - **Sensitive:** a backup holds the key and the journal's message text. Folders are owner-only on Linux and
   macOS. Copy them somewhere other than this disk, and treat them like the live state.
 
@@ -501,8 +596,11 @@ and the review records what happened later.
 | Recipients | `supplier` (approved), `unvetted-vendor` (not approved) |
 | Approval | `HR-2026-118` binds operator + public-spec + supplier |
 
-An approval reference that isn't in the registry (for example `HR-2026-999`) is treated as *unverified*
-and goes to REVIEW. It is never reported as forged.
+An approval reference that is not in the registry (for example `HR-2026-999`) is *unverified*;
+its absence alone is not proof of forgery. With scope satisfied, a clean assessment holds it for
+REVIEW. Current policy also holds an `APPROVAL_MANIPULATION` finding with an unknown approval,
+even if its evidence verifies. A different code-supported threat finding can still BLOCK.
+Missing or unknown approval never produces ALLOW.
 
 ## Layout
 
@@ -532,6 +630,11 @@ and goes to REVIEW. It is never reported as forged.
 | `tools/mutation_check.py` | the deliberate-defect check: breaks each safety rule in a scratch copy and confirms a test fails |
 | `tools/handshake.py`, `HANDSHAKE.md` | the handshake for an incoming agent: a read-only state report, and the protocol around it |
 | `forge_vigil/backup.py` | `backup create`, `verify` and `restore`: consistent, verified, never-overwriting backups |
+| `forge_vigil/registry.py`, `REGISTRY.md` | validated operator registry, immutable snapshots and delivery bindings |
+| `tools/operator_drill.py`, `OPERATOR_DRILL.md` | disposable submit/review/export/backup/restore/replay exercise |
+| `tools/registry_drill.py` | disposable configured-registry exercise |
+| `tools/qualification_check.py`, `QUALIFICATION.md` | offline controls, frozen case packs and inspectable results |
+| `DEMO.md`, `JUDGMENTS.md` | demonstration commands, honest evidence labels and human judgment process |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the work starts with
 [HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).

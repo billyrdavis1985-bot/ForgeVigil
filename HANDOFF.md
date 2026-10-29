@@ -1,5 +1,87 @@
 # HANDOFF: ForgeVigil
 
+## Current recovery checkpoint — CP19, October 29
+
+- Billy directed proceeding after the fresh handshake audit, confirmed all 16 case judgments,
+  supplied the project motivation and reviewed the demo opening. Assigned scope is the bounded
+  CP19 documentation/demo/evaluation package. No commit, push, merge or live call is authorized.
+- Verified starting commit: `22c60a078147f95124125ab41075cc0ed3dd4461`; starting content tree:
+  `64c3b3b9c7831d870c8cc7a8b5808420965fc450`. The checkout was clean before implementation.
+- The original session reported an uncommitted CP19 ZIP. Its bytes are unavailable here, and
+  whether that original archive was downloaded is unknown. Billy has now applied the recovery
+  archive to the clean verified Windows base. This recovery is a newly identified
+  delivery against the verified merged CP18 base; it does not inherit the missing ZIP's test claims.
+  Preserve old archives; do not apply the original installer over the validated recovery.
+- Local version is 0.19.0. Seven source paths: README.md, HANDOFF.md, QUALIFICATION.md, DEMO.md,
+  JUDGMENTS.md, LICENSE and forge_vigil/versions.py. The only application-code edit is CODE_VERSION.
+  No high-risk file, existing test/mutant, dependency, shipped case, policy, prompt or stored format changed.
+- Added the selected MIT license, corrected current merged-status drift and prepared a 175-second
+  rehearsal target with exact existing PowerShell commands. Bounded investigation visuals are
+  labelled scripted; the current views do not acquire new message display or release capabilities.
+- Judgments: all 16 operator-confirmed with model consultation, assistant-authored fictional scenarios.
+  The earlier eight ambiguous responses remain unconfirmed. Cases 01-02 were reconfirmed here.
+  Working JSON stays separate; source templates remain blank. Case 04 expects REVIEW only; case 09
+  expects BLOCK despite a known current-policy REVIEW path. Preserve discrepancies without retuning.
+- Fresh recovery-baseline checks before edits: Linux/Python 3.12.14 suite, 246 tests passed;
+  fixture demo PASS; selected four adapter tests PASS and review demo PASS. Those checks were at 0.18.0.
+- All 16 confirmed cases were frozen at version 0.19.0, seal
+  `f676b6c5b60eb2560a1c97cac5e65549b1a08cc348b69e1e031eaa032f139396`.
+  Fixture baseline completed 16/16 and returned FAIL: five attack deliveries (04, 05, 06, 07, 16),
+  plus case 09 held REVIEW instead of BLOCK; six expectation mismatches. No benign threat flags,
+  assessment failures or critical permission-invariant failures; all three out-of-scope cases denied.
+  These are clean-fixture results, not Muse judgment. Every expectation remains as confirmed.
+- The qualification tool retains all outcomes but deletes temporary receipts. A separate complete
+  fixture evaluator run retained 16 receipts and matched all outcomes/scoring exactly. Both records
+  are included with the frozen pack, draft, source pins and registry in the delivery evidence.
+- Fresh CP19 Linux/Python 3.12.14 control qualification PASS: 246 tests, 0 skipped, all 17 registry/Muse
+  tests passed; 229/229 mutants caught, 0 skipped; review demo PASS, operator drill PASS (12 stages),
+  registry drill PASS (9 stages), cleanup PASS and temporary state removed. No existing tests or
+  mutants changed; inventories remain 246 and 229. Separate JSON records retain control PASS and
+  fixture FAIL. The control-only record says judgments PENDING because no case pack was supplied to
+  that run; the separate fixture record has FROZEN judgments. Neither record supersedes the other.
+  CP19 Windows controls are now validated by the operator-supplied output below. Timed rehearsal
+  remains pending. Model detection NOT MEASURED; no paid inference.
+- The package-only installer checks the clean exact base, package hashes, seven staged paths,
+  resulting tree and source pins. It runs existing offline controls and separately reproduces the
+  recorded fixture FAIL without changing labels. Ten external helper checks cover LF/CRLF application,
+  dirty/wrong/already-applied state, corruption and validation failures. Validation subprocesses in
+  those helper checks were simulated from actual records; CRLF checks ran on Linux, not Windows.
+  Billy subsequently ran that installer on Windows; its observed result is recorded below.
+  No commit or push is made by the installer.
+
+## CP19 Windows result supplied October 29
+
+- Evidence source: Billy pasted the installer console summary and subsequent Git commands into this
+  conversation. The underlying Windows JSON files and original transcript have not been uploaded
+  to this cloud workspace; do not claim to have inspected them directly.
+- Starting commit/tree matched `22c60a078147f95124125ab41075cc0ed3dd4461` /
+  `64c3b3b9c7831d870c8cc7a8b5808420965fc450`; clean exact-base preflight PASS. The installer applied
+  and staged exactly seven paths, then completed all required checks.
+- Observed Windows control summary: PASS; 246 tests, 12 skipped, all 17 registry/Muse tests PASS;
+  207/207 runnable deliberate defects caught, 22 skipped; demo PASS; operator drill PASS (12 stages);
+  registry drill PASS (9 stages); cleanup PASS. External provider calls 0; billed spend 0.00 USD.
+- Separate fixture summary: BASELINE FAIL; judgments FROZEN; cleanup PASS; model detection NOT
+  MEASURED. The helper reported exact reproduction of the packaged five attack deliveries and
+  six expectation mismatches. The control-only record's PENDING judgments mean no pack was supplied
+  to that separate run; they do not undo the frozen judgments.
+- Evidence directory printed by Windows:
+  `C:\dev\ForgeVigil\var\qualification\cp19-recovery-909094835b74447a8c143ecce3f52f34`.
+  It contains `control-qualification.json`, `fixture-baseline.json`, `installation-start.json`,
+  `installation-complete.json` and the packaged evidence. Preserve the complete directory.
+- Original transcript path:
+  `C:\Users\Billy\Downloads\ForgeVigil-cp19-console-1c79dd06dbf849ec82a27f93d49ae309.txt`.
+- `git status` showed exactly DEMO.md, HANDOFF.md, JUDGMENTS.md, LICENSE, QUALIFICATION.md, README.md
+  and forge_vigil/versions.py staged, no unstaged/untracked work. `git write-tree` returned
+  `065126e46be0f13dda8e1c6137064e3de7d23ca7`, exactly the recovery package result tree.
+- A subsequent documentation-only follow-up records this result and corrects the reviewed README
+  claims about output retention, spending estimates, schema migration, label validation, fixed-order
+  evaluation and concurrent client journaling. It adds Windows setup and puts quick start before
+  checkpoint history. It preserves the application's original behavior and frozen expectations;
+  the final source tree differs from the earlier tested package tree only in Markdown files.
+- No application code, prompt, stored format, dependency, case, test or mutant changes in the follow-up.
+  Source/version pins and the frozen seal remain unchanged. No high-risk file changes. Rehearsal,
+  commit/push/PR and any live measurement are still outstanding under the existing authority rules.
+
 ## Session and authority
 - **Who decides:** Billy Davis (operator) assigns checkpoints and approves every commit (see AGENTS.md). Commits use `Billy Davis <…noreply…>`, with no attribution trailers. For Checkpoint 14, the operator authorized branch `cp14-privacy` and a pull request, never a merge, deployment or spending.
 - **How changes shipped before Checkpoint 14:** the prior cloud session could not push (403), so changes were delivered as patches plus guarded PowerShell cells.
@@ -37,8 +119,10 @@
 | `38f2252` | 0.14.0 | CP14 receipt privacy and umask-independent permission coverage |
 | `c404eed` | 0.17.0 | Validated CP15-17 path hardening, operator/registry drills and pinned operator registry; Windows migration-test cleanup repair |
 | `66b692e` | 0.17.0 | Merge PR #1; content tree exactly matches the Windows-tested delivery |
+| `7696681` | 0.18.0 | Complete CP18 offline qualification and Windows validation |
+| `22c60a0` | 0.18.0 | Merge PR #2; current verified base for CP19 |
 
-## What exists (0.18.0 Windows control qualification passed; unmerged)
+## What exists (merged CP18 controls; local CP19 version 0.19.0, Windows controls validated)
 - **Request path:**
   - An authenticated local HTTP request is checked against the strict schema, then recorded as a durable intent.
   - It then gets an advisory assessment and a deterministic policy decision. Only `policy.py` can produce ALLOW.
@@ -82,12 +166,17 @@
     - decisions: `release`, `reject`, `confirm`, `false-positive`. A release re-checks scope and needs `--despite-threat` if the model flagged a threat. One decision per request, written atomically with its delivery;
     - `export <id> --message-file F` or `--from-journal`, or `export --all`: the text is verified against the stored digest.
   - `report`: a read-only, single-snapshot summary.
-  - `review show`, `report` and `review export` open the database read-only.
+  - `review list`, `review show`, `report` and `review export` open the database read-only and do
+    not migrate older schemas. Supported migration happens through a writer such as authorized
+    `serve` startup, after preserving/verifying backups and the intended registry/key. Startup also
+    recovers unfinished requests and therefore changes state.
 - **Real traffic (Checkpoint 11, `client.py`):**
   - `submit` sends one request to `serve` on 127.0.0.1 (no other host is possible), using the `FORGEVIGIL_TOKEN` from the environment.
   - It validates the request with the server's own `parse_request` first, so a malformed request is never sent.
   - Exit codes: 0 when recorded (`decided` or `replayed`), 1 when refused, 2 when nothing was sent.
-  - **Requester's journal:** `var/sent.jsonl` (`--journal`, or `--no-journal`). It keeps the message of each request the server recorded, never a refused one, and holds one entry per request_id (a replay adds nothing).
+  - **Requester's journal:** `var/sent.jsonl` (`--journal`, or `--no-journal`). It keeps the message of each request the server recorded, never a refused one, and skips sequential replays already present. The read/append check is not atomic, so concurrent
+    callers can duplicate entries for one request_id. Atomic capture is deferred; the server outbox
+    guard is separate. No Windows journal corruption was demonstrated in the supplied report.
     - Appended, ASCII-only JSON lines; 0600 on POSIX; git-ignored.
     - The reader splits bytes, not text, and counts bad lines instead of failing.
   - `review export --all` runs every journaled request through `export_case` and groups the results: exported, no decision yet, ALLOW or DENY, rejected (needs `--label`, one at a time), already exported, not in this database, text mismatch, or failed. It exits 1 on a mismatch or failure, and opens the database read-only.
@@ -112,7 +201,9 @@
     - `eval_cases.json` (`cp06.eval.v1`): 43 cases;
     - `eval_cases_holdout.json` (`cp07.holdout.v1`): 18 held-out cases, never tuned against.
   - Flags: `--repeat N` (reports unstable cases), `--case`, `--cases FILE`, `--holdout`, `--prompt`, `--json`.
-  - A test checks every shipped label against the policy.
+  - Tests check shipped scope labels and expected-outcome consistency; they do not verify the
+    semantic correctness of benign/attack judgments. Review exports derive labels from decisions
+    (including benign for release despite a threat), so they are not independent ground truth.
   - Safety-rule breaks exit 1; detection rates are measured, not asserted.
 - **Operations:**
   - `serve` holds an OS lock on `<db>.lock` for its whole life, so a second server is refused (exit 2) and a crash releases it.
@@ -562,16 +653,18 @@ and operator approval are still pending.
   At preparation of this record, no commit, branch push, PR or merge had been observed.
 
 ## Known risks and open decisions
-1. **All 61 shipped evaluation cases are fictional and share an author with the policy and prompt rules.** CP18 adds 16 assistant-authored candidates awaiting human judgments, not completed independent evidence. Real decisions turned into cases with `review export` remain needed; none have been reported.
+1. **All 61 shipped evaluation cases are fictional and share an author with the policy and prompt rules.** The separate 16 CP18 candidates now have confirmed operator judgments with model consultation; they remain fictional and nonblind. Fixture/scripted tests do not establish live detection quality. Real decisions turned into cases remain needed; none have been reported.
 2. **Verdicts vary occasionally,** and delivery of an attack carrying a *valid* approval depends on the model alone.
 3. **The digest key lives beside the database.** It protects a database file copied on its own, but not a copy of the whole state folder.
    - Losing `<db>.key` makes `serve` refuse to start on a database with keyed records. `backup create` copies it, and `backup verify` proves it matches the database when the journal has keyed requests.
    - Key rotation is not supported.
-4. **Requests whose approval reference is unknown are held, not blocked, even when flagged.** Releasing one needs `--despite-threat`.
+4. **Unknown approval is uncertainty, not proof of forgery.** With scope satisfied, a clean
+   assessment or a supported `APPROVAL_MANIPULATION` finding produces REVIEW. Other supported
+   threat findings can BLOCK. Releasing a flagged REVIEW still requires `--despite-threat`.
 5. **Exported case files, the requester's journal and backups contain request text,** which the database is designed not to hold; backups also hold the key. Configured registry snapshots in the database/backups additionally contain registered document bytes (including restricted bytes) and destinations, unencrypted. All operator state stays under git-ignored `var/` by default.
    - On Windows they follow the profile folder's permissions, not owner-only.
-   - Two `submit` runs writing at the same instant could damage each other's journal line on Windows, where appends are not atomic. Not observed; the reader would count such a line as unreadable, and that request can still be exported with `--message-file`.
-6. **The spend cap can overshoot by one call,** and demo and eval caps apply per run. The cloud workspace cannot reach `api.meta.ai` or most documentation hosts.
+   - The client performs an unsynchronized read-then-append. The supplied prior review reported duplicate entries from concurrent submissions; this recovery has not rerun that reproduction. Windows journal corruption was not demonstrated. Journal concurrency and verified review message display remain deferred.
+6. **The spend cap can overshoot by one call,** and demo and eval caps apply per run. Older cloud sessions reported provider/network restrictions. Current provider reachability has not been tested and no live call is authorized.
 7. **The development server is `http.server`.** Hosting on the operator's Cloudflare domain is deferred. It first needs:
    - a production server;
    - TLS, for example through a Cloudflare Tunnel;
@@ -589,18 +682,20 @@ and operator approval are still pending.
 - Any change to a measured prompt's text needs a new prompt version; the SHA-256 pins enforce this.
 
 ## Next steps
-1. **There is no live database on the operator's PC yet:** run 22 found no `var\forgevigil.sqlite3`. The first `serve` creates it and its key. After that, run `backup create`, copy the folder off that disk, and repeat after real traffic.
-2. **Checkpoint 18:** Windows control qualification passed and its JSON record was saved under
-   var/qualification. Billy approved the completed checkpoint's Git save/push. Apply this observed
-   outcome record, check the final tree, pass the commit-gate suite and push cp18-validated for PR review.
-   A merge remains a separate operator decision. Supply judgments for the
-   fictional candidates before freezing/evaluating that separate set. Keep model detection
-   NOT MEASURED until a separately assigned, capped live run is actually observed.
-3. **Checkpoint 17 registry:** review REGISTRY.md before preparing actual operator state. Registry
-   records require the exact snapshot when exporting/evaluating cases. Keep any older production backup
-   before a write upgrade; 0.16 cannot read store 4. Synthetic fixture/drill success does not establish
-   real traffic or live detection quality. A further checkpoint still requires an operator assignment.
-4. **Real traffic:** after operator validation, configure the operator registry, send requests with
-   `submit`, decide the held ones, then export cases with the matching snapshot (REGISTRY.md).
-   Fixture runs and the existing fictional operator seed do not establish real-traffic detection quality.
-5. **Possible later checkpoints (operator's choice):** hosting on the operator's Cloudflare domain (deferred); digest-key rotation.
+1. Preserve the recovery ZIP, Windows transcript, complete evidence directory, frozen cases and fixture
+   FAIL. Attach accessible evidence to the eventual PR: ignored `var/qualification/` files are not
+   included by a source commit. The pasted summary does not replace the original JSON records.
+2. Apply the documentation-only follow-up against the exact staged recovery tree, preserving the
+   original Windows records. Inspect the new diff/tree and retain both tree identities. It does not
+   rerun or replace the original control qualification; program/version pins are unchanged.
+3. Rehearse DEMO.md, retaining the actual timing and scripted labels. A Windows qualification demo
+   PASS does not establish that a timed screen recording was completed.
+4. Review the final seven-file change and evidence before separately authorizing the specific
+   commit/push/PR. The commit gate reruns the suite; use Billy's identity and no trailers. No merge,
+   deployment or spending follows from saving a branch.
+5. Any bounded Muse evaluation requires a separate assignment and spend budget, with frozen expectations.
+   Preserve failures and misses; no prompt/policy tuning against this set. Journal concurrency, verified
+   review message display, hosting, Glimmer and broader defenses remain outside CP19.
+6. The last historical PC report had no live database; this validation uses disposable state and
+   does not establish the current operator database inventory. Before real traffic, review REGISTRY.md,
+   configure operator facts, create verified backups and protect journal text, snapshot bytes and key.
