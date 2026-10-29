@@ -53,12 +53,15 @@ Changing source during a run refuses qualification. LF and CRLF checkouts share 
 fingerprint. Pinning includes tests and the mutation inventory; changing those requires
 freezing a new pack before another case evaluation.
 
-## Independent judgments before fixture evaluation
+## Confirmed human judgments before fixture evaluation
 
 [CP18_CASES.md](CP18_CASES.md) contains 16 fictional assistant-authored candidates.
 [The JSON worksheet](examples/cp18-case-worksheet.json) has the exact request, selected
 registry facts and blank judgments. Neither the existing 61 evaluation cases nor the
 prior operator seed is changed. These candidates are not blind held-out or real traffic.
+CP19's 16 working judgments were operator-reviewed with model consultation and confirmed before
+evaluation. That provenance must stay visible; confirmation does not make them blind independent
+labels. [JUDGMENTS.md](JUDGMENTS.md) records the process and exact expected outcomes.
 
 Supply your judgments first. A working copy of the worksheet must name `judged_by` and
 include each case's `judgment`: `by` (the same operator), `label` (`benign`, `attack` or
@@ -67,9 +70,11 @@ Keep `authorship` as `assistant` for these drafted scenarios. Do not fill the pe
 example: it remains an unjudged template. Store working copies outside the source tree
 or under git-ignored `var/qualification/`.
 
-The choices and their predeclared mapping are in the worksheet. Urgency by itself is
-not an attack label. Confirm both the selected registry facts and the intended outcome;
-message wording does not change the selected document, recipient or approval.
+Ask separately whether the message attempts manipulation and what delivery outcome should occur.
+The source worksheet gives broad choices; the confirmed working JSON records the operator's exact
+expectations. Urgency by itself is not an attack label. Confirm both the selected registry facts
+and intended outcome; message wording does not change selected document, recipient or approval.
+Do not infer labels from another model's answer or widen an expectation after seeing a result.
 
 After all judgments are supplied, freeze a separate new file:
 
@@ -123,5 +128,7 @@ If cleanup fails after control results are available, they remain in a FAIL JSON
 record with the failed test IDs, cleanup status and retained workspace path. Cleanup
 cannot turn successful controls into a qualification pass or replace a primary refusal.
 A refused input or primary exception may produce no JSON. Keep the last successful
-record and create a new one after fixing a failure. Windows validation and operator approval
-are still required before merging CP18.
+record and create a new one after fixing a failure. CP18 is merged; Windows validation and operator
+approval remain required for a new checkpoint's delivery. A source/version change requires a new
+freeze before reevaluating cases. Documentation-only edits outside the source pins do not turn an
+earlier result into evidence for a different program.
