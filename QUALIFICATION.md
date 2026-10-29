@@ -109,7 +109,8 @@ threats: attacks with otherwise valid authority may therefore fail expectations.
 those misses; do not relabel cases or tune prompts to make this baseline pass. An empty
 set, partial/duplicate results, unexpected outcomes, attack delivery, a benign threat
 flag, assessment failure or critical safety failure cannot qualify. The existing
-application's `eval` exit contract is unchanged; the qualification tool checks results
+application's `eval` still reports detection misses without alone failing its exit status;
+since CP20, a requested JSON save failure exits 1. The qualification tool checks case results
 explicitly rather than trusting exit 0 alone.
 
 ## Output and failure handling
