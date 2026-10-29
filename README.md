@@ -78,22 +78,34 @@ grant capabilities, delivery goes only to a local outbox, and every result leave
   reference targets and quote hashes are no longer persisted. Evidence records retain the kind, a fixed
   relation to the request, an allowlisted claim and the verification result. Existing receipts remain
   unchanged and still replay, show, export and back up. Permission tests control their own creation mask.
-- **Checkpoint 15 (local work; Windows helper completed):** database aliases share the canonical
+- **Checkpoint 15 (merged; Windows validated):** database aliases share the canonical
   server lock and key location; hard-linked databases are refused. Restore preserves existing staging
   files, rejects overlapping destinations before writing and never replaces a destination that appears
   during copying. Export creates its temporary file exclusively and preserves an occupied temporary
   path. Receipt and database schemas, policy and prompts are unchanged.
-- **Checkpoint 16 (local work; Windows helper and drill completed):** an operator readiness drill runs the
+- **Checkpoint 16 (merged; Windows validated):** an operator readiness drill runs the
   existing commands on disposable fixture state: submit, review, export, backup, restore and replay.
   It checks exact outcomes, delivery identity/bytes, receipt preservation and zero model calls/spend,
   then stops its own servers and removes the temporary state. See [OPERATOR_DRILL.md](OPERATOR_DRILL.md).
 
-- **Checkpoint 17 (local work; repaired Windows helper completed):** a validated operator registry for
+- **Checkpoint 17 (merged; Windows validated):** a validated operator registry for
   versioned documents, recipients and exact approvals. Local activation retains complete snapshots;
   intents/receipts pin their original delivery context, and release checks current scope plus the
   bound bytes/destination. Store 4, receipt v6, review v2 and backup v2 preserve older records and v1
   backups. **Registered document bytes, including restricted documents, are stored unencrypted in
   SQLite and backups.** See [REGISTRY.md](REGISTRY.md) for file rules, activation and a disposable drill.
+
+
+- **Checkpoint 18 (Windows control qualification passed; unmerged):** one offline qualification
+  command runs the suite, deliberate defects, review demo and both drills, and records observed
+  counts, source/prompt pins and per-test outcomes in a new JSON file. Seventeen integration tests
+  exercise the Muse adapter against a custom registry using only the loopback fake API. A separate
+  16-case assistant-authored worksheet awaits operator judgments before freeze/fixture evaluation.
+  The first Windows run exposed a timeout-test helper count and read-only Git-object cleanup;
+  their local repair adds seven regression tests and preserves failed-suite results if cleanup fails.
+  Windows qualification passed: 246 tests (12 skipped), 207/207 runnable mutants caught
+  (22 skipped), both drills and cleanup PASS. These checks do not establish live model detection quality.
+  See [QUALIFICATION.md](QUALIFICATION.md).
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -104,7 +116,7 @@ Not established yet:
 ## Quick start (standard library only; Python 3.11–3.13)
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 187 tests; temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 246 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -114,6 +126,7 @@ python3 tools/mutation_check.py                  # deliberate-defect check: do t
 python3 tools/handshake.py                       # what this copy contains: tree, versions, digests, counts (read-only)
 python3 tools/operator_drill.py                  # disposable fixture workflow, ending with restored replay and cleanup
 python3 tools/registry_drill.py                  # configured-registry workflow on fresh fictional fixture state
+python3 tools/qualification_check.py             # one offline control run and a new JSON results record
 
 # Local development server: 127.0.0.1 only, NOT a public deployment server
 export FORGEVIGIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
