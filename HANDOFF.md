@@ -34,8 +34,11 @@
 | `4e60614` | 0.13.0 | Checkpoint 13: verified backups (`backup create`, `verify`, `restore`) |
 | `27579d0` | 0.13.0 | HANDOFF: Checkpoint 13 Windows results (run 22) |
 | `9c4bde8` | 0.13.0 | Handoff guards: scope and non-goals, the safety net only grows, high-risk files, a clean checkout in the handshake |
+| `38f2252` | 0.14.0 | CP14 receipt privacy and umask-independent permission coverage |
+| `c404eed` | 0.17.0 | Validated CP15-17 path hardening, operator/registry drills and pinned operator registry; Windows migration-test cleanup repair |
+| `66b692e` | 0.17.0 | Merge PR #1; content tree exactly matches the Windows-tested delivery |
 
-## What exists (0.17.0 local work on 0.16.0/0.15.0/0.14.0; Windows validation pending)
+## What exists (0.18.0 Windows control qualification passed; unmerged)
 - **Request path:**
   - An authenticated local HTTP request is checked against the strict schema, then recorded as a durable intent.
   - It then gets an advisory assessment and a deterministic policy decision. Only `policy.py` can produce ALLOW.
@@ -116,7 +119,7 @@
   - On POSIX the database, `-wal`, `-shm`, lock and key files are 0600.
   - `review` and `report` take no lock, by design.
 - **Deliberate-defect tool (`tools/mutation_check.py`):**
-  - Each of 179 entries breaks one rule in a scratch copy and runs the test that must notice. 18 are POSIX-only and are skipped elsewhere.
+  - Each of 229 entries breaks one rule in a scratch copy and runs the test that must notice. 22 are POSIX-only and are skipped elsewhere.
   - Before planting anything, it requires every referenced test to pass on the unmodified copy.
   - `tests/test_mutation_tool.py` keeps every anchor and test name valid, also on a CRLF checkout, and runs the tool end to end.
 
@@ -400,8 +403,166 @@ and operator approval are still pending.
   mutant changed and no new suite, mutation run, live call, commit, branch, push or CP18 work occurred.
   Applying this documentation supplement later changes its content tree without changing tested code.
 
+## CP18 review phase
+- Billy assigned CP18 to begin with a review of the completed work and recommendations. The review
+  used a new detached worktree at main `66b692ef75ba9339e5a95210b7d87ce5fb10f9d2`, tree
+  `672a0761cda9ec853dd09dc044a1d1f9e5c2cc9f`. Its initial handshake was clean: code 0.17.0,
+  187 tests, 180 mutants (18 POSIX-only). All previous worktrees and archives were preserved.
+- The merged baseline was independently fetched and matched the validated delivery. Billy's final
+  Windows commit-gate output was Ran 187 tests in 45.495s, OK (skipped=12); the commit is c404eed,
+  authored as Billy Davis, and PR #1 merged it as 66b692e. The operator then fast-forwarded local main
+  and supplied `## main...origin/main` with no changed paths. The earlier detached-HEAD helper failure
+  was corrected in the downloaded helpers; it occurred before any commit and changed no application code.
+- Inspected deterministic policy/evidence, registry/service/Muse integration, release, evaluation,
+  test seams, operator workflow evidence and seed-case provenance. Existing Muse tests select default
+  fixtures and registry tests/drill normally select fixture assessors, leaving a permanent combined
+  integration-coverage gap. Two operator seed judgments plus rewrites/three derived controls remain
+  two operator scenarios, not five independent cases; the restricted negative skips assessment.
+- A throwaway probe outside the repository exercised the actual Muse adapter with the existing
+  loopback fake API and an activated custom registry. Seven checks behaved as specified: custom facts
+  and exact allowed effect; replay/conflict without another call/effect; verified threat BLOCK;
+  unconfirmed quote REVIEW; explicit local release bound to original context; restricted scope
+  denied before assessment; and refused budget without another call. Four scripted loopback requests,
+  zero external provider requests and zero billed spend. Mock usage costs were synthetic. Temporary
+  state was removed. These are spot checks, not new permanent tests or live detection evidence.
+- Two further diagnostics confirmed the existing evaluation contract: a reported fixture attack miss
+  can accompany exit 0, and an empty set can produce exit 0/zero results. Recommended qualification
+  must check nonempty/complete results and expected outcomes explicitly and distinguish safety failure,
+  model failure and detection accuracy. No existing evaluator behavior was changed in this review.
+- Recommended implementation scope: permanent custom-registry/Muse integration tests and mutants;
+  one offline qualification command with concise/JSON evidence; and a separate 12-20-case operator
+  judgment worksheet with provenance and freeze-before-run criteria. Human labels must be obtained,
+  not invented. Keep existing policy/prompts/stored schemas/cases/dependencies fixed, with no spending,
+  hosting, UI, new provider, automatic release or external delivery. Use the established Git/Windows
+  workflow and short standard Git steps, without adding new commit/push automation.
+- Updated this file's current status/inventory and recorded the review. Historical run records remain
+  historical. Application/test/mutant/schema/prompt/case files and CODE_VERSION 0.17.0 are unchanged;
+  no full suite/mutation rerun, new commit, named branch, push, PR, merge or live call was performed.
+  Application implementation for CP18 has not started. Review/probe results and the bounded scope
+  recommendation were delivered separately for the operator's review.
+
+## CP18 implementation: offline qualification
+- Billy approved the bounded CP18 scope after the review. Base remains main
+  `66b692ef75ba9339e5a95210b7d87ce5fb10f9d2`, tree
+  `672a0761cda9ec853dd09dc044a1d1f9e5c2cc9f`. CODE_VERSION is now 0.18.0 locally;
+  no agent commit, named branch, PR, push or merge was made for CP18.
+- Added 17 permanent custom-registry/Muse tests using the existing loopback fake API and actual
+  adapter/transport. Checked authenticated HTTP and exact bound delivery, trusted tools/evidence,
+  scope denial before calls, invalid answers, budget refusal, replay/conflict, local release,
+  stale/withdrawn authority and restart recovery. Scripted replies test controls, not model judgment.
+- Added `tools/qualification_check.py`: one offline command runs the full suite, all runnable mutants,
+  review demo and both drills; prints heartbeats and observed counts; writes a new inspectable JSON
+  record with per-test outcomes and source/policy/prompt/schema pins. Missing, duplicate or empty
+  evidence and nonzero command exits cannot qualify. Integration tests must pass, not skip.
+  Child credentials are stripped; raw child exception text is not retained in the report.
+  Output uses exclusive creation and owner-only POSIX modes, refuses source paths/symlink parents,
+  and never overwrites. Temporary working state is removed; the separate results record is retained.
+- Added a separately sealed case-pack format for explicit operator judgments and an optional fixture
+  baseline. It validates exact registry context, unique/nonempty cases, provenance and code/prompt
+  pins; keeps input files unchanged; and separates outcome mismatches, attack deliveries, false
+  positives, assessment failures and critical safety failures. Existing application `eval` behavior
+  and all stored formats are unchanged. Fixture success always says model detection NOT MEASURED.
+- Billy chose to judge assistant-authored fictional scenarios. `CP18_CASES.md` and
+  `examples/cp18-case-worksheet.json` contain 16 candidates with every judgment blank. The first
+  four were presented for judgment; no specific case outcomes were supplied at delivery. No operator pack was
+  frozen or evaluated. Unit-test labels are explicitly synthetic. Existing main/held-out/seed cases
+  are unchanged; new fictional candidates are neither blind held-out nor real-traffic evidence.
+- Safety net: 187 -> 239 tests (+52), 180 -> 221 mutants (+41), 18 -> 22 POSIX-only mutants.
+  All 180 earlier mutant definitions are identical by AST comparison; every existing test file is
+  unchanged. No existing assertion, test or mutant was removed or loosened.
+- Observed Linux/Python 3.12.14 qualification under explicit umask 022: 239 tests, skipped 0;
+  all 17 integration tests PASS; 221 of 221 mutants caught; review demo PASS; operator drill PASS
+  (12 stages); registry drill PASS (9 stages); RESULT: PASS, exit 0. Separate full umask 077 mutation
+  run: 221 of 221 caught, exit 0. Python 3.13.5 suite: Ran 239 tests in 25.972s, OK, no skips.
+  Qualification recorded cleanup success, zero external provider calls and zero billed spend.
+  Python 3.11 and Windows were not run here; Windows validation remains pending.
+- Expected Windows inventory, not an observed result: 239 tests with 12 existing platform skips;
+  199 of 199 runnable mutants caught, 22 skipped. `QUALIFICATION.md` gives the single Python command
+  for PowerShell 5.1 and explains the resulting JSON and failure handling. No new Git save/push
+  automation was added. The operator's clean merged main is the patch's required base.
+- Every changed source path: `HANDOFF.md`, `README.md`, `QUALIFICATION.md`, `CP18_CASES.md`,
+  `examples/cp18-case-worksheet.json`, `forge_vigil/versions.py`, `tests/test_registry_muse.py`,
+  `tests/test_qualification.py`, `tools/qualification_check.py`, `tools/mutation_check.py`.
+  The only high-risk file changed is `tools/mutation_check.py`, adding 41 defects for new tests and
+  qualification guards. Policy, evidence, Muse/prompts, review, store, digests and shipped cases
+  remain byte-identical to the base. No dependencies, runtime capability or stored schema changed.
+
+## CP18 Windows qualification repair (0.18.0)
+- The operator applied the original CP18 patch on clean main and its staged tree check passed:
+  `011023ae5592f9bcda1885595fe6a7e4a41c8b89`. The repair is built on that exact content tree;
+  the merged main/base remains 66b692e / `672a0761cda9ec853dd09dc044a1d1f9e5c2cc9f`.
+  Original worktree, ZIP and patch remain preserved. No agent commit, branch, PR or push was made.
+- The first Windows qualification printed Running test suite, two progress heartbeats, then
+  `REFUSED: temporary_state_cleanup_failed`. A read-only diagnostic found the saved result:
+  239 tests, 12 skipped, Successful False; the only failed test was
+  `tests.test_qualification.QualificationTests.test_child_timeout_reaps_process_and_closes_output`.
+  The remaining workspace held a temporary handshake repository with three read-only Git objects.
+- The operator reran that one test. It failed at `self.assertEqual(len(processes),1)` with
+  `AssertionError: 2 != 1`. The Popen spy counted both the timed-out Python process and Windows'
+  required taskkill helper. Its instrumentation now separates the intended probe from helpers.
+  Every original assertion remains, including exactly one probe, its exit and closed output pipe.
+  Four added assertions require the expected helper count, successful helper exit and both helper
+  pipes closed. All 91 original assertion calls in tests/test_qualification.py remain by AST comparison.
+- `remove_workspace` now handles Windows read-only Git files through a narrow deletion callback.
+  Only a singly linked regular read-only file can have its writable flag restored. Symlinks,
+  junctions and shared files are not chmodded. Persistent busy-file/deletion errors still fail;
+  cleanup is never waived. The earlier failed workspace remains available for inspection.
+- Cleanup failure previously replaced the suite outcome or primary exception. Qualification now
+  retains available control results and failed test IDs in a FAIL JSON record, reports cleanup
+  failure and the retained workspace, and cannot qualify with state left behind. A primary refusal
+  or cancellation remains primary. Raw exception text is not added to the evidence record.
+- Seven new regression tests cover read-only Windows deletion, protection of other/link/shared/busy
+  files, preserving failed suite evidence, failed cleanup after otherwise successful controls,
+  cleanup no-ops and preserving a primary refusal. Against the original CP18 tool they produced
+  four failures and one error; the two protection checks already held. All seven pass after repair.
+  Eight new deliberate defects were added, and all eight were caught in the focused run.
+- Inventory: 239 -> 246 tests and 221 -> 229 mutants; POSIX-only mutants remain 22.
+  Every original mutant remains unchanged. The existing timeout test's stronger instrumentation
+  is the only existing test changed. No policy, evidence, prompt, stored format or application
+  runtime file changed. CODE_VERSION remains 0.18.0 because this is the unmerged CP18 repair.
+- Python 3.13.5 cloud suite: Ran 246 tests in 24.988s, OK, no skips. Python 3.12.14 full qualification
+  under umask 022: 246 tests, skipped 0, all 17 integration tests PASS; 229 of 229 mutants caught;
+  review demo PASS; operator drill PASS (12 stages); registry drill PASS (9 stages); Cleanup PASS;
+  RESULT PASS, exit 0. The independent full umask-077 run also caught 229 of 229, exit 0.
+  Zero external provider calls and billed spend; current temporary state removed.
+  Windows repair validation remains pending. Expected there: 246 tests with 12 existing skips;
+  207 of 207 runnable mutants caught, 22 skipped. These expectations are not a Windows pass.
+- Repair paths: HANDOFF.md, README.md, QUALIFICATION.md, tools/qualification_check.py,
+  tests/test_qualification.py, tests/test_qualification_cleanup.py and tools/mutation_check.py.
+  The only high-risk file changed is tools/mutation_check.py, adding eight defects without editing
+  earlier entries. The repair is delivered as one ZIP and a directly pasteable apply-and-run cell;
+  it preserves staged work, checks the patch hash/starting/result trees, and commits/pushes nothing.
+- Worksheet collection is paused. Eight earlier Allow replies were preserved outside the source
+  tree, but the operator then said they were not sure what the choices meant. Those replies are
+  not confirmed independent delivery judgments; no case pack was frozen or evaluated. The source
+  worksheet remains blank. Windows troubleshooting takes priority over collecting more labels.
+
+## CP18 Windows validation confirmed
+- The operator ran the guarded repair cell, which verified staged tree
+  `96c81c497e8117dfbe8885129243b2d938fd3a02`, then completed qualification on Windows.
+- Observed output: Control checks PASS; 246 tests, 12 skipped, all 17 registry/Muse tests PASS;
+  207 of 207 runnable mutants caught, 22 skipped (229 total); demo PASS; operator drill PASS
+  (12 stages); registry drill PASS (9 stages); Cleanup PASS; RESULT PASS.
+- The record path printed by the operator was
+  `E:\App_Cache\forgevigil-qualification-results-sl0t0xur\qualification.json`.
+  The console summary was supplied; the JSON file itself has not been uploaded to this session.
+- The operator saved that JSON without overwriting to
+  `C:\dev\ForgeVigil\var\qualification\cp18-windows-2a8693e400b948a394a8cc1bad53e1dc.json`.
+  The subsequent Git status showed main tracking origin/main, exactly the 11 CP18 paths staged,
+  no unstaged or untracked paths, and 2536 insertions / 13 deletions before this outcome-only
+  documentation update. No commit or push was reported.
+- Fixture expectations NOT_RUN; operator judgments PENDING; model detection NOT_MEASURED;
+  zero external provider calls and zero billed spend. The eight uncertain worksheet responses
+  remain unconfirmed; no independent case pack was frozen or evaluated.
+- This supersedes the earlier pending-Windows status. The tested program and safety checks are
+  unchanged while this documentation records the result. Billy approved saving and pushing CP18
+  once complete, after reviewing the staged file list and successful Windows qualification.
+  The approved Git step is branch cp18-validated, authored as Billy Davis with no trailers,
+  after its commit-gate suite passes. Merging, releases, deployment and spending remain separate.
+  At preparation of this record, no commit, branch push, PR or merge had been observed.
+
 ## Known risks and open decisions
-1. **All 61 evaluation cases are fictional and share an author with the policy and prompt rules.** Real decisions turned into cases with `review export` are the independent check, and there are none yet.
+1. **All 61 shipped evaluation cases are fictional and share an author with the policy and prompt rules.** CP18 adds 16 assistant-authored candidates awaiting human judgments, not completed independent evidence. Real decisions turned into cases with `review export` remain needed; none have been reported.
 2. **Verdicts vary occasionally,** and delivery of an attack carrying a *valid* approval depends on the model alone.
 3. **The digest key lives beside the database.** It protects a database file copied on its own, but not a copy of the whole state folder.
    - Losing `<db>.key` makes `serve` refuse to start on a database with keyed records. `backup create` copies it, and `backup verify` proves it matches the database when the journal has keyed requests.
@@ -429,11 +590,12 @@ and operator approval are still pending.
 
 ## Next steps
 1. **There is no live database on the operator's PC yet:** run 22 found no `var\forgevigil.sqlite3`. The first `serve` creates it and its key. After that, run `backup create`, copy the folder off that disk, and repeat after real traffic.
-2. **Checkpoint 14-17 delivery:** the operator applied the layers on the PC in order. CP14 results and
-   successful CP15/16 helper completion are recorded above; CP17's repaired helper has now completed
-   successfully too. Review the combined staged changes and preserve this validated baseline in Git
-   only with the operator's approval of that specific delivery. Pushes remain deferred to the PC;
-   no new commit, branch, PR, push or merge has been performed by this agent.
+2. **Checkpoint 18:** Windows control qualification passed and its JSON record was saved under
+   var/qualification. Billy approved the completed checkpoint's Git save/push. Apply this observed
+   outcome record, check the final tree, pass the commit-gate suite and push cp18-validated for PR review.
+   A merge remains a separate operator decision. Supply judgments for the
+   fictional candidates before freezing/evaluating that separate set. Keep model detection
+   NOT MEASURED until a separately assigned, capped live run is actually observed.
 3. **Checkpoint 17 registry:** review REGISTRY.md before preparing actual operator state. Registry
    records require the exact snapshot when exporting/evaluating cases. Keep any older production backup
    before a write upgrade; 0.16 cannot read store 4. Synthetic fixture/drill success does not establish
