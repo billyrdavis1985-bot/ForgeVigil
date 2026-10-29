@@ -21,10 +21,10 @@ Evidence checking establishes that quotations and cited facts exist, not that Mu
 correctly. Genuine evidence can still support a false positive. An otherwise authorized attack can
 be delivered if Muse misses it. Only `policy.py` produces ALLOW; model output grants no capability.
 
-Start with [DEMO.md](DEMO.md) for the rehearsal and exact PowerShell commands,
-[JUDGMENTS.md](JUDGMENTS.md) for case provenance and expectations,
+Start with [HANDOFF.md](HANDOFF.md) for the current checkpoint and engineering plan,
 [QUALIFICATION.md](QUALIFICATION.md) for reproducible offline checks,
-[REGISTRY.md](REGISTRY.md) for operator-owned facts, and [HANDOFF.md](HANDOFF.md) for continuity.
+[JUDGMENTS.md](JUDGMENTS.md) for case provenance and expectations, and
+[REGISTRY.md](REGISTRY.md) for operator-owned facts. [DEMO.md](DEMO.md) holds the later rehearsal guide.
 The project uses the [MIT license](LICENSE).
 
 ## Quick start (standard library only; Python 3.11–3.13)
@@ -164,7 +164,7 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   (22 skipped), both drills and cleanup PASS. These checks do not establish live model detection quality.
   See [QUALIFICATION.md](QUALIFICATION.md).
 
-- **Checkpoint 19 (local, uncommitted; Windows controls validated):** project entry points, MIT license,
+- **Checkpoint 19 (merged in PR #3 as `a437316`; Windows controls validated):** project entry points, MIT license,
   demo/judgment guides and version 0.19.0. All 16 separate judgments were confirmed before evaluation.
   This is a newly identified recovery delivery, not a claim to reproduce the missing original ZIP.
   Policy, prompts, stored formats, dependencies, shipped cases, tests and mutants are unchanged.
@@ -173,8 +173,21 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   Fresh Linux controls passed: 246 tests, 229/229 mutants, both drills and cleanup. Billy supplied
   the CP19 Windows installer summary: 246 tests (12 skipped), 207/207 runnable mutants caught
   (22 skipped), all 17 integration tests, demo, both drills and cleanup PASS. Windows reproduced
-  the same fixture FAIL, and the staged tree matched the recovery package. Timed rehearsal remains pending.
+  the same fixture FAIL, and the merged tree matched the approved delivery. Timed rehearsal remains pending.
   Offline results and remaining steps are recorded in [HANDOFF.md](HANDOFF.md).
+
+- **Checkpoint 20 (0.20.1; Windows controls validated):** protects `report --json`
+  and `eval --json` with new-file reservation and explicit save failures. Initial 0.20.0 Linux
+  checks passed, but Windows qualification correctly failed two trailing-dot/space subcases:
+  normalization erased those characters before the guard inspected them. The repair checks raw
+  components first, retaining every original assertion. Inventory is 262 tests / 242 mutants
+  (two tests and one mutant added after 0.20.0). Linux/Python 3.12 repair qualification passed: 262 tests,
+  242/242 mutants, both drills and cleanup. Python 3.13.5 passed all 262 tests. Billy supplied
+  the Windows PASS: 262 tests (13 skipped), all 17 integrations, 218/218 runnable mutants caught
+  (24 skipped), smoke check, both drills and cleanup. The staged tree matched the repair exactly.
+  The same fixture FAIL was reproduced; the original failed Windows record is preserved. Policy, prompts, schemas,
+  dependencies, shipped cases and confirmed judgments are unchanged. See [HANDOFF.md](HANDOFF.md)
+  for evidence, exact staged-state repair and the four-day engineering plan.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
@@ -187,7 +200,7 @@ Not established yet:
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 246 tests; temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 262 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -333,7 +346,8 @@ process separate from these consistency checks. See [JUDGMENTS.md](JUDGMENTS.md)
 
 It prints one line per case and then a summary. That summary separates two things:
 - **Safety rules, which must never break:** out-of-scope requests are denied without a model call, and
-  only approved bytes are delivered. A break makes the command exit with status 1.
+  only approved bytes are delivered. A break makes the command exit with status 1. A requested
+  JSON save failure also exits 1; that is an artifact failure, separate from these control checks.
 - **Measured rates:** attacks flagged, blocked or delivered; benign requests wrongly flagged; unconfirmed
   findings held by the false-positive check; model failures; and spend. These describe the model and
   can vary between runs.
@@ -350,13 +364,21 @@ $out = Join-Path ([Environment]::GetFolderPath("Desktop")) "forgevigil-eval.txt"
 
 While it runs, a progress line such as `[12/43] attack-role-play: BLOCK` appears on screen for each
 request. Progress is shown only on a terminal, so a redirected or saved report stays clean. The
-`--json` preflight rejects a directory destination or a missing parent, but does not establish that
-writing will succeed. A final write can fail after inference; the command prints that failure and
-can still exit 0 when its critical permission checks passed. Preserve console output and confirm
-that the requested JSON exists and parses before treating it as retained evidence. Interrupted
-evaluations may have no final JSON. Use a fresh destination to preserve earlier results.
+`--json` requires a new file in an existing folder. Existing files, hard-link aliases, symlinks
+(including dangling links), symlink parents, special files and reserved Windows names, streams and device/extended namespaces are
+refused before assessment. Raw Windows components are checked before path normalization can
+remove trailing dots or spaces. The file is exclusively reserved and held open before any inference,
+so a competing writer cannot replace earlier evidence. POSIX files are private (0600 subject to
+umask); Windows uses inherited folder permissions.
 
-Add `--json <path>` to save every receipt as well. Current v6 receipts retain the target-free evidence
+A later write, flush, sync or close failure exits 1 and prints a save failure while keeping the
+console summary. Refused destinations exit 2 before inference. No automatic retry occurs.
+An interrupted or failed export can leave an empty or partial file; existence alone is not proof
+of completion. Preserve it and the console output, check the exit status and parse the JSON.
+Use a fresh destination for each invocation. Incremental receipt recovery from interrupted runs
+is not implemented. Detection misses still appear in the results without alone changing exit status.
+
+Add `--json <new-path>` to save every receipt as well. Current v6 receipts retain the target-free evidence
 format introduced in v5, omitting reference targets and quote text/hashes; historical receipts
 retain their original evidence format. API keys are not recorded.
 
@@ -452,8 +474,12 @@ The rules behind it:
 
 ```powershell
 .\.venv\Scripts\python.exe -m forge_vigil report
-.\.venv\Scripts\python.exe -m forge_vigil report --db var\other.sqlite3 --json report.json
+.\.venv\Scripts\python.exe -m forge_vigil report --db var\other.sqlite3 --json var\report-new.json
 ```
+
+Choose a fresh JSON destination. Report exports refuse existing paths and the database/key/lock/
+SQLite side-file namespace, including currently absent side files. A save failure returns nonzero;
+report viewing still opens SQLite read-only. This does not change `review export`'s append behavior.
 
 One screen covering everything in the database:
 - requests by disposition;

@@ -81,3 +81,22 @@ retained all 16 receipts and reproduced the same outcomes and scoring. The packa
 records and identifies their separate runs; it does not claim the retained receipts came from the
 first run. The application's ordinary `eval` returned exit 0 for its narrower permission invariants,
 while the qualification baseline correctly failed the human expectations.
+
+## Separate CP20 freeze at 0.20.0
+
+The unchanged confirmed draft was sealed again after the CP20 source/version change:
+`4d63e22ebd7d63de84d3ca49c64860f8004ea35ed48389c880bb71451054e7e6`.
+This is a new run identity, not a replacement for the 0.19.0 pack. The fixture outcomes and
+scoring matched the original exactly: five attack deliveries, six expectation mismatches, no
+assessment failures, benign threat flags or critical permission failures. All 16 receipts were
+retained by a separately identified evaluator run. Model detection remains NOT MEASURED.
+
+## Separate CP20 Windows repair freeze at 0.20.1
+
+The raw Windows-name ordering repair adds tests/mutation coverage and changes source/version pins.
+The unchanged confirmed draft was separately sealed as
+`011093ba1bc4fda036dc17fee726883a430a212e0a06ca9411db8db38ce1704c`.
+Fixture outcomes again match the original exactly: five attack deliveries, six mismatches, no
+benign flags, assessment failures or critical permission failures. A separate evaluator retained
+16 full receipts. Earlier freezes/results and the Windows 0.20.0 control FAIL remain preserved.
+Model detection stays NOT MEASURED; no expectation was changed in response to those results.

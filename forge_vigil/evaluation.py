@@ -20,6 +20,7 @@ from typing import Callable, TextIO
 
 from .assessment import FAILED_STATUSES, fixed_clean_assessor, format_usd
 from .fixtures import OPERATOR_ACTOR_ID, PUBLIC_SPEC_CONTENT, default_fixtures
+from .json_output import new_output, write_json
 from .schema import SubmittedRequest, parse_request
 from .service import ForgeVigilService
 from .store import Store
@@ -261,7 +262,7 @@ def run_evaluation(
     progress: TextIO | None = None,
     registry_file: Path | None = None,
 ) -> int:
-    """Exit status 1 only for a broken safety rule; detection misses are reported, not failed.
+    """Exit status 1 for a broken safety rule or failed JSON save; misses remain reported.
 
     `case_ids` runs just those cases, for cheap re-runs of the ones that need attention.
     `repeat` runs every case that many times (1-10) to measure how stable the verdicts are.
@@ -284,46 +285,51 @@ def run_evaluation(
         if unknown:
             raise ValueError("unknown case id(s): " + ", ".join(unknown))
         cases = [case for case in cases if case.case_id in set(case_ids)]
-    with tempfile.TemporaryDirectory(prefix="forgevigil-eval-") as tmp:
-        store = Store(Path(tmp) / "eval.sqlite3")
-        if registry is not None:
-            from .registry import activate_registry
-            activate_registry(store.path, registry)
-        fixtures = registry.fixtures() if registry else default_fixtures()
-        if live_config is None:
-            assessor, mode = fixed_clean_assessor(), "fixture assessor (baseline: never flags anything)"
-        else:
-            from .muse import MuseAssessor
+    reported = False
+    try:
+        with new_output(json_path, (cases_path, registry_file)) as destination:
+            with tempfile.TemporaryDirectory(prefix="forgevigil-eval-") as tmp:
+                store = Store(Path(tmp) / "eval.sqlite3")
+                if registry is not None:
+                    from .registry import activate_registry
+                    activate_registry(store.path, registry)
+                fixtures = registry.fixtures() if registry else default_fixtures()
+                if live_config is None:
+                    assessor, mode = fixed_clean_assessor(), "fixture assessor (baseline: never flags anything)"
+                else:
+                    from .muse import MuseAssessor
 
-            assessor = MuseAssessor(live_config, store, fixtures)
-            mode = (f"live assessor {assessor.adapter_id}, prompt {assessor.prompt_version}, "
-                    f"spend cap {format_usd(live_config.spend_cap_nanousd)} USD")
-        service = ForgeVigilService(store, assessor, fixtures=fixtures)
-        runs = f" x {repeat} runs" if repeat > 1 else ""
-        print(f"ForgeVigil evaluation {case_set} - {len(cases)} cases{runs}, {mode}, temporary state\n", file=out)
-        def report_progress(done: int, total: int, result: CaseResult) -> None:
-            run = f" #{result.run}" if repeat > 1 else ""
-            print(f"[{done}/{total}] {result.case.case_id}{run}: {result.disposition}", file=progress, flush=True)
+                    assessor = MuseAssessor(live_config, store, fixtures)
+                    mode = (f"live assessor {assessor.adapter_id}, prompt {assessor.prompt_version}, "
+                            f"spend cap {format_usd(live_config.spend_cap_nanousd)} USD")
+                service = ForgeVigilService(store, assessor, fixtures=fixtures)
+                runs = f" x {repeat} runs" if repeat > 1 else ""
+                print(f"ForgeVigil evaluation {case_set} - {len(cases)} cases{runs}, {mode}, temporary state\n", file=out)
+                def report_progress(done: int, total: int, result: CaseResult) -> None:
+                    run = f" #{result.run}" if repeat > 1 else ""
+                    print(f"[{done}/{total}] {result.case.case_id}{run}: {result.disposition}", file=progress, flush=True)
 
-        results = run_cases(service, cases, repeat, report_progress if progress is not None else None)
-        summary = dict(summarize(results, store, fixtures if registry else None), case_set=case_set)
-        if registry:
-            summary["registry_snapshot"] = registry.digest
-    print(format_report(results, summary), file=out)
+                results = run_cases(service, cases, repeat, report_progress if progress is not None else None)
+                summary = dict(summarize(results, store, fixtures if registry else None), case_set=case_set)
+                if registry:
+                    summary["registry_snapshot"] = registry.digest
+            print(format_report(results, summary), file=out)
+            report = {
+                "summary": summary,
+                "cases": [
+                    {"id": r.case.case_id, "run": r.run, "label": r.case.label, "expect": list(r.case.expect),
+                     "receipt": r.receipt}
+                    for r in results
+                ],
+            }
+            reported = True
+            write_json(destination, report)
+    except OSError as exc:
+        if not reported:
+            raise  # refused before assessment, or the run itself could not complete
+        print(f"\ncould not save {json_path} ({exc.strerror}); JSON may be incomplete; "
+              "preserve the console summary; no automatic retry was made", file=out)
+        return 1
     if json_path is not None:
-        report = {
-            "summary": summary,
-            "cases": [
-                {"id": r.case.case_id, "run": r.run, "label": r.case.label, "expect": list(r.case.expect),
-                 "receipt": r.receipt}
-                for r in results
-            ],
-        }
-        try:
-            Path(json_path).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-        except OSError as exc:
-            # The run itself finished and is reported above; only the extra copy failed.
-            print(f"\ncould not write {json_path} ({exc.strerror}); the results above are complete", file=out)
-        else:
-            print(f"\nfull results written to {json_path}", file=out)
+        print(f"\nfull results written to {json_path}", file=out)
     return 1 if summary["critical"] else 0

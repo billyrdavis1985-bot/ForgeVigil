@@ -1,6 +1,9 @@
 # ForgeVigil demonstration and rehearsal
 
-CP19 rehearsal/storyboard. The local version is 0.19.0; Billy supplied successful Windows control qualification; actual timed rehearsal remains pending. This newly identified recovery delivery does not reproduce the missing original CP19 ZIP.
+CP19 rehearsal/storyboard, first validated at 0.19.0. CP19 is merged; the current local build is
+0.20.1 with Windows control qualification validated by operator-supplied console output. These commands remain a later guide: Billy selected four
+engineering days before demo preparation. Offline smoke checks are control validation, not a timed
+rehearsal. This recovery guide does not reproduce the missing original CP19 ZIP.
 
 Working duration target: 175 seconds, carried from the supplied project plan. This is a planning target, not a verified competition-rule statement. Actual rehearsal timing remains pending. Windows control qualification includes the offline demo
 and both drills; it is separate from a timed filming rehearsal.

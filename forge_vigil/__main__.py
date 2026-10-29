@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     demo.add_argument("--review", action="store_true", help="finish by releasing the REVIEW case as the operator")
     report = commands.add_parser("report", help="summary of a database: outcomes, reviews, failures, spend")
     report.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
-    report.add_argument("--json", type=Path, help="also write the report as JSON to this file")
+    report.add_argument("--json", type=Path, help="also write the report as JSON to a new file (never overwrites)")
     review = commands.add_parser("review", help="operator decisions on REVIEW and BLOCK cases (local only)")
     actions = review.add_subparsers(dest="action", required=True)
     common = argparse.ArgumentParser(add_help=False)
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     export.add_argument("--out", type=Path, default=Path("var/review_cases.json"), help="case file to add to")
     evaluate = commands.add_parser("eval", help="run the labelled evaluation cases on temporary state")
     evaluate.add_argument("--assessor", choices=ASSESSORS, default="fixture")
-    evaluate.add_argument("--json", type=Path, help="also write full results (receipts included) to this file")
+    evaluate.add_argument("--json", type=Path, help="write full results (receipts included) to a new file (never overwrites)")
     evaluate.add_argument("--case", action="append", dest="case_ids", metavar="ID", help="run only this case (repeatable)")
     evaluate.add_argument("--repeat", type=int, default=1, metavar="N",
                           help="run every case N times (1-10) to see which verdicts vary")
@@ -205,12 +205,12 @@ def _backup(args) -> int:
 
 def _unwritable_output(path: Path | None) -> str | None:
     """Why an output file could not be written, checked before any work (or spend) starts."""
-    if path is None:
-        return None
-    if path.is_dir():
-        return f"{path} is a folder, not a file"
-    if not path.parent.is_dir():
-        return f"the folder for {path} does not exist"
+    from .json_output import check_output
+
+    try:
+        check_output(path)
+    except OSError as exc:
+        return str(exc)
     return None
 
 
@@ -236,9 +236,9 @@ def _demo(assessor: str, with_review: bool) -> int:
 
 
 def _report(db_path: Path, json_path: Path | None) -> int:
-    import json
     import sqlite3
 
+    from .json_output import new_output, write_json
     from .report import build_report, format_report
     from .store import Store
 
@@ -249,18 +249,27 @@ def _report(db_path: Path, json_path: Path | None) -> int:
     if problem:
         print(f"refusing to run: {problem}", file=sys.stderr)
         return 2
+    # Even absent SQLite side files and the key/lock namespace are not export targets.
+    canonical_db = db_path.resolve()
+    protected = [Path(str(canonical_db) + suffix) for suffix in ("", ".key", ".lock", "-wal", "-shm", "-journal")]
+    reported = False
     try:
-        report = build_report(Store(db_path, read_only=True))
+        with new_output(json_path, protected) as destination:
+            report = build_report(Store(db_path, read_only=True))
+            print(format_report(report))
+            reported = True
+            write_json(destination, report)
     except (RuntimeError, sqlite3.Error) as exc:
         print(f"refusing to run: {exc}", file=sys.stderr)
         return 2
-    print(format_report(report))
+    except OSError as exc:
+        if not reported:
+            print(f"refusing to run: {exc}", file=sys.stderr)
+            return 2
+        print(f"could not save {json_path} ({exc.strerror}); JSON may be incomplete; preserve the console summary",
+              file=sys.stderr)
+        return 1
     if json_path is not None:
-        try:
-            json_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-        except OSError as exc:
-            print(f"could not write {json_path} ({exc.strerror})", file=sys.stderr)
-            return 1
         print(f"\nreport written to {json_path}")
     return 0
 

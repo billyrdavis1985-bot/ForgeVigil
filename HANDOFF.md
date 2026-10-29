@@ -1,6 +1,150 @@
 # HANDOFF: ForgeVigil
 
-## Current recovery checkpoint — CP19, October 29
+## Current CP20 Windows repair — 0.20.1, October 29, 2026
+
+- Billy applied the 0.20.0 package on Windows. Preflight/staging passed at tree
+  `2945a34374a4c09ad47a7a4c0bbfb96e5f7a3f45`; qualification failed in
+  `tests.test_json_output.JsonOutputTests.test_windows_device_stream_and_ambiguous_names_are_rejected`.
+  Observed: 260 tests, 13 skipped, inventory 17 registry/Muse tests; control FAIL, cleanup PASS.
+  Mutation/workflow/baseline steps were not reached. No commit/push or provider call occurred.
+- Billy then ran the unchanged failing test directly. The supplied traceback shows two failed
+  subcases, `trailing.` and `trailing `, both "OSError not raised" (1 test in 0.020s, 2 failures).
+  `os.path.abspath` invokes Windows normalization before the old guard inspected components,
+  losing the trailing characters the guard needed to reject. This was an implementation defect;
+  no test expectation was weakened. The Linux-only simulation had not covered that ordering.
+- Repair: inspect supplied Windows components before normalization, including relative filenames,
+  while allowing legitimate `..` parent components. Retain namespace refusal, exclusive output
+  reservation and all existing save-failure/permission protections. CODE_VERSION is 0.20.1.
+- Appended two regression tests and one deliberate defect. All original 260 tests/assertions and
+  241 mutants are unchanged; inventory is now 262 tests / 242 mutants, 24 POSIX-only. The high-risk
+  `tools/mutation_check.py` changes only by appending the ordering-defect entry. Policy, prompts,
+  stored schemas, dependencies, shipped cases and confirmed judgments remain fixed.
+- Final Linux/Python 3.12.14 qualification PASS: 262 tests, zero skipped, all 17 integrations;
+  242/242 mutants caught, zero skipped; smoke check, both drills and cleanup PASS. Python 3.13.5
+  also passed all 262 tests in 33.923 seconds, no skips. The new normalization regression
+  first failed on delivered 0.20.0, then passed on the repair. Billy subsequently supplied successful
+  Windows qualification: 262 tests, 13 skipped; all 17 integrations PASS; 218/218 runnable mutants
+  caught, 24 skipped; smoke check, both drills and cleanup PASS. The original failure is preserved.
+- Original Windows record (operator-supplied console/traceback; JSON not inspected in cloud):
+  `C:\dev\ForgeVigil\var\qualification\cp20-a4cc482aea2d4d6eb55c03554b4fb4a1\control-qualification.json`.
+  Transcript: `C:\Users\Billy\Downloads\ForgeVigil-cp20-console-a93f5298ba1b4b8f88dd4eccdc87b1c9.txt`.
+  Keep both. The repair helper snapshots these records before applying the delta, creates new
+  evidence, and requires the exact original staged tree with no unstaged/untracked work.
+  Do not rerun the original installer or reset/unstage the eleven-file change.
+- Eight repair paths: forge_vigil/json_output.py, forge_vigil/versions.py,
+  tests/test_json_output.py, tools/mutation_check.py, README.md, HANDOFF.md, DEMO.md, JUDGMENTS.md.
+  The overall CP20 change still contains the same eleven staged paths. No commit, push, merge,
+  deployment, other-model contact or live inference is authorized by this repair.
+- Re-froze the unchanged confirmed draft for the repaired source. Seal:
+  `011093ba1bc4fda036dc17fee726883a430a212e0a06ca9411db8db38ce1704c`.
+  Fixture FAIL remains identical: five delivered attacks and six expectation mismatches, no
+  benign flags, assessment failures or critical permission failures. A separate run retained
+  16 receipts. Preserve earlier 0.19.0/0.20.0 packs and results; model detection NOT MEASURED.
+
+## CP20 Windows success supplied October 29
+
+- Evidence source: Billy pasted the full repair console and Git output. The original Windows JSON
+  files/transcript remain on his PC; they have not been directly inspected in the cloud.
+- Repair preflight matched the exact original staged tree and preserved the failed 0.20.0 record
+  and transcript before applying. The 0.20.1 full Windows control result is PASS: 262 tests,
+  13 skipped; all 17 registry/Muse integration tests PASS; 218/218 runnable deliberate defects
+  caught, 24 skipped (242 total); smoke demo PASS, operator drill PASS (12 stages), registry
+  drill PASS (9 stages), cleanup PASS. External provider calls 0; billed spend 0.00 USD.
+- Separate frozen fixture baseline FAIL reproduced exactly: five delivered attacks, six expectation
+  mismatches; model detection NOT MEASURED. The controls-only PENDING judgments mean no case pack
+  was supplied to that invocation; the separate fixture record reports FROZEN. No judgments lost.
+- Windows evidence folder:
+  `C:\dev\ForgeVigil\var\qualification\cp20-winfix-402152f3a5ad419eae4987b3befbe610`.
+  It contains the copied original Windows failure/console, repair-start/applied/complete records,
+  control-qualification.json, fixture-baseline.json and packaged evidence. Preserve the folder.
+- Success transcript:
+  `C:\Users\Billy\Downloads\ForgeVigil-cp20-winfix-console-5195d004c73145418ee2b15601521a30.txt`.
+- Git status showed main tracking origin/main, exactly eleven staged CP20 paths, no unstaged or
+  untracked work. `git write-tree` returned `a727e32c4fd1a1ed115961b1ea4f4f57907b0b4b`, exactly the
+  cloud-qualified repair tree. No commit or push was made.
+- A three-Markdown-only finalization records this result in README.md, HANDOFF.md and DEMO.md.
+  It exports original Windows evidence before applying, checks the exact staged state/result tree,
+  and preserves all originals. Program/version/policy/prompt/schema/test/mutation pins and the
+  frozen seal stay unchanged. No qualification rerun is claimed for this documentation update.
+- Next gate is review of the final eleven-file staged tree and evidence, then specific approval for
+  commit/branch push/PR. Publication, merge, live measurement and spending are not authorized.
+
+## Historical initial CP20 delivery — 0.20.0, October 29, 2026
+
+- Billy accepted the repository review and assigned CP20: protect report/evaluation JSON output,
+  update continuity and validate. Local implementation/testing/package preparation is authorized.
+  No CP20 commit, push, PR, merge, deployment or live model call is authorized.
+- CP19 is merged in PR #3 at `a437316b33688ee8b765b11e49cb4caf006a1c2c`, tree
+  `e926f81f811536adc9a67c0832dfe6c43cc9e0c8`. GitHub main still matched at CP20 start.
+  Billy reported his workstation clean and synced. The CP19 commit was
+  `d2da3932bc4526fba6b0bf7f691aeb51ca9e1782`; its specific publication approval is complete.
+- This work uses a separate checkout on that exact clean merge. Original recovery work and all
+  archives remain preserved. Local version is 0.20.0; the patch/package states its exact result tree.
+- Runtime scope: `report --json` and `eval --json` create a new, exclusively reserved output file;
+  occupied paths, links/symlink parents, devices and unsafe Windows names/streams are refused.
+  Report also protects absent database/key/lock/SQLite side-file names. Evaluation reserves its
+  file before assessor setup/calls, including direct `run_evaluation` callers. Both save through
+  the held descriptor; write/flush/sync/close errors return failure, with no automatic retry.
+  Empty/partial files can remain after failure/interruption; success and valid JSON must be checked.
+  No incremental recovery from interrupted evaluation is claimed. Report viewing remains read-only.
+- Changed application paths: `forge_vigil/__main__.py`, `forge_vigil/evaluation.py`,
+  new `forge_vigil/json_output.py`, `forge_vigil/versions.py`. Added
+  `tests/test_json_output.py`; appended 12 mutants in high-risk `tools/mutation_check.py`
+  to cover new export safety rules. All 229 prior entries and every existing test file are unchanged.
+  Documentation updates: README.md, HANDOFF.md, QUALIFICATION.md, JUDGMENTS.md and DEMO.md.
+  No other high-risk file, policy, prompt, stored format, dependency, shipped case or judgment changed.
+- Inventory: 246 -> 260 tests; 229 -> 241 mutants, 24 POSIX-only (previously 22).
+  Targeted CP20 tests and all 12 new mutants pass. The first new permission mutant survived
+  because the test inherited restrictive umask; strengthening the new test with a restored
+  permissive umask caught it. No existing expectation was changed. Early helper preparation
+  failures and the initial new-test failures are retained separately from final validation.
+- Final Linux/Python 3.12.14 qualification PASS: 260 tests, zero skipped, all 17 integration
+  tests; 241/241 mutants caught, zero skipped; review smoke demo, 12-stage operator drill,
+  9-stage registry drill and cleanup PASS. Separate Python 3.13.5 suite: 260 tests in
+  37.280 seconds, zero skips, PASS. This final source includes the Windows device/extended-
+  namespace guard; earlier passes/freeze/source are retained as development evidence only.
+  Windows/Python 3.11 remains pending. Expected Windows inventory: 260 tests, 13 skipped;
+  217 runnable mutants, 24 skipped. These are expected counts, not observed Windows results.
+  No external provider call, local model call or spend occurred.
+- Reused the exact confirmed draft/registry from CP19. A separate 0.20.0 freeze has seal
+  `4d63e22ebd7d63de84d3ca49c64860f8004ea35ed48389c880bb71451054e7e6`.
+  New 16-case fixture baseline FAIL exactly matches the original: five attacks delivered
+  (04, 05, 06, 07, 16), six expectation mismatches including case 09, no benign flags,
+  assessment failures or critical permission failures. A separate evaluator run saved all 16
+  receipts. Detection on this pack remains NOT MEASURED. The 0.19.0 pack/result is preserved.
+- Prior Windows CP19 controls: operator-supplied console, 246 tests/12 skipped, 207/207 runnable
+  mutants/22 skipped, all 17 integration tests, both drills and cleanup PASS; later commit-gate
+  suite also passed. This is prior evidence, not validation of CP20. Original Windows JSON ZIPs
+  were not inspected in the cloud; PR #3 had checked boxes but no accessible ZIP links at review.
+
+## Governing engineering plan
+
+Billy selected the uploaded October 29 feedback report plus four engineering days before demo
+preparation. That timing supersedes the report's earlier October 31 freeze/November 2 filming
+assumptions. The original Operating Plan v0.3 and competition rules were not independently checked.
+The AI pet and Sentinel projects are separate; their features/details are outside this build/demo.
+
+1. Finish CP20 output-safety controls, preserve evidence, validate on Windows, then obtain specific
+   publication approval. Post original Windows evidence ZIPs to PR #3 when available.
+2. Next proposed measurement: one separately authorized, budgeted Muse run against the frozen
+   expectations. Preserve failures/misses; no tuning. The report's $20 suggestion is not spending
+   approval; reservations can overrun by one call. Any code change requires a separate new freeze.
+3. Conditional read-only local dashboard: existing verified ledger/report fields, no message or
+   model text, no release controls, no new backend/dependencies/hosting; about one day maximum.
+4. Conditional local Glimmer explanation after the final decision, asynchronous with deterministic
+   fallback; 2-3 hours maximum, test 10 receipts across four dispositions for invented IDs, leakage
+   and fallback. It never assesses, changes policy or delivers. Prior reported assessor NOT GO
+   remains; do not rerun that gate or add a second assessor. Bonus eligibility is unverified.
+5. Stabilize and cut optional features if gates consume the window. Demo preparation follows
+   engineering. Journal atomicity/verified review text, hosting, external delivery, broader defense,
+   key rotation/retention and history rewriting remain deferred unless separately assigned.
+
+Only CP20 is assigned. Conditional later items are candidates, not implementation/spend approval.
+
+## Historical CP19 recovery record — October 29
+
+The status/authorization statements in this section describe preparation before PR #3.
+The current state and next steps above/below supersede its pending publication/rehearsal steps.
 
 - Billy directed proceeding after the fresh handshake audit, confirmed all 16 case judgments,
   supplied the project motivation and reviewed the demo opening. Assigned scope is the bounded
@@ -122,7 +266,7 @@
 | `7696681` | 0.18.0 | Complete CP18 offline qualification and Windows validation |
 | `22c60a0` | 0.18.0 | Merge PR #2; current verified base for CP19 |
 
-## What exists (merged CP18 controls; local CP19 version 0.19.0, Windows controls validated)
+## What exists (merged CP19 foundation; local CP20 repair version 0.20.1)
 - **Request path:**
   - An authenticated local HTTP request is checked against the strict schema, then recorded as a durable intent.
   - It then gets an advisory assessment and a deterministic policy decision. Only `policy.py` can produce ALLOW.
@@ -204,13 +348,13 @@
   - Tests check shipped scope labels and expected-outcome consistency; they do not verify the
     semantic correctness of benign/attack judgments. Review exports derive labels from decisions
     (including benign for release despite a threat), so they are not independent ground truth.
-  - Safety-rule breaks exit 1; detection rates are measured, not asserted.
+  - Safety-rule breaks and requested JSON save failures exit 1; detection rates are measured, not asserted. New-file JSON output is reserved before assessment; prior artifacts are never replaced.
 - **Operations:**
   - `serve` holds an OS lock on `<db>.lock` for its whole life, so a second server is refused (exit 2) and a crash releases it.
   - On POSIX the database, `-wal`, `-shm`, lock and key files are 0600.
   - `review` and `report` take no lock, by design.
 - **Deliberate-defect tool (`tools/mutation_check.py`):**
-  - Each of 229 entries breaks one rule in a scratch copy and runs the test that must notice. 22 are POSIX-only and are skipped elsewhere.
+  - Each of 242 entries breaks one rule in a scratch copy and runs the test that must notice. 24 are POSIX-only and are skipped elsewhere.
   - Before planting anything, it requires every referenced test to pass on the unmodified copy.
   - `tests/test_mutation_tool.py` keeps every anchor and test name valid, also on a CRLF checkout, and runs the tool end to end.
 
@@ -663,7 +807,7 @@ and operator approval are still pending.
    threat findings can BLOCK. Releasing a flagged REVIEW still requires `--despite-threat`.
 5. **Exported case files, the requester's journal and backups contain request text,** which the database is designed not to hold; backups also hold the key. Configured registry snapshots in the database/backups additionally contain registered document bytes (including restricted bytes) and destinations, unencrypted. All operator state stays under git-ignored `var/` by default.
    - On Windows they follow the profile folder's permissions, not owner-only.
-   - The client performs an unsynchronized read-then-append. The supplied prior review reported duplicate entries from concurrent submissions; this recovery has not rerun that reproduction. Windows journal corruption was not demonstrated. Journal concurrency and verified review message display remain deferred.
+   - The client performs an unsynchronized read-then-append. The supplied prior review reported duplicate entries from concurrent submissions; the later review reproduced duplicate capture while the server retained one request/receipt/outbox item. Windows journal corruption was not demonstrated. Journal concurrency and verified review message display remain deferred.
 6. **The spend cap can overshoot by one call,** and demo and eval caps apply per run. Older cloud sessions reported provider/network restrictions. Current provider reachability has not been tested and no live call is authorized.
 7. **The development server is `http.server`.** Hosting on the operator's Cloudflare domain is deferred. It first needs:
    - a production server;
@@ -682,20 +826,13 @@ and operator approval are still pending.
 - Any change to a measured prompt's text needs a new prompt version; the SHA-256 pins enforce this.
 
 ## Next steps
-1. Preserve the recovery ZIP, Windows transcript, complete evidence directory, frozen cases and fixture
-   FAIL. Attach accessible evidence to the eventual PR: ignored `var/qualification/` files are not
-   included by a source commit. The pasted summary does not replace the original JSON records.
-2. Apply the documentation-only follow-up against the exact staged recovery tree, preserving the
-   original Windows records. Inspect the new diff/tree and retain both tree identities. It does not
-   rerun or replace the original control qualification; program/version pins are unchanged.
-3. Rehearse DEMO.md, retaining the actual timing and scripted labels. A Windows qualification demo
-   PASS does not establish that a timed screen recording was completed.
-4. Review the final seven-file change and evidence before separately authorizing the specific
-   commit/push/PR. The commit gate reruns the suite; use Billy's identity and no trailers. No merge,
-   deployment or spending follows from saving a branch.
-5. Any bounded Muse evaluation requires a separate assignment and spend budget, with frozen expectations.
-   Preserve failures and misses; no prompt/policy tuning against this set. Journal concurrency, verified
-   review message display, hosting, Glimmer and broader defenses remain outside CP19.
-6. The last historical PC report had no live database; this validation uses disposable state and
-   does not establish the current operator database inventory. Before real traffic, review REGISTRY.md,
-   configure operator facts, create verified backups and protect journal text, snapshot bytes and key.
+
+1. Apply the three-Markdown-only finalization against the exact Windows-validated staged tree
+   a727e32, export the original Windows evidence, and inspect the final diff/tree. Preserve all
+   original/new JSON and transcripts. A recorded fixture FAIL with the same outcomes is expected evidence, not permission to relabel.
+2. Inspect the exact staged paths/result tree and Windows result before approving this specific
+   commit/push/PR. Publication uses Billy's identity, no trailers, and a fresh passing suite gate.
+3. Continue the governing engineering plan above. No live provider call is authorized by this
+   checkpoint; demo preparation remains deferred. Do not add conditional features in this patch.
+4. Current live operator-state inventory is unknown. Before real traffic, review REGISTRY.md,
+   configure operator facts, verify backups and protect journal text, snapshot bytes and key.
