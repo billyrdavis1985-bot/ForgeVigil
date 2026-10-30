@@ -194,15 +194,16 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
 - **Checkpoint 21 (measurement; no code version change):** Billy supplied the completed live
   16-case console: 6/6 attack flags, zero attack deliveries, 0/7 benign threat flags, zero model
   failures, three scope denials before assessment and 14/16 exact disposition matches. Cases04/09
-  remain mismatches; recorded spend $0.13191725. The original ZIP/receipts have not yet been
-  inspected in this workspace. These fictional, model-assisted judgments do not establish broad
-  phishing or malware accuracy; no labels or expectations were changed.
-- **Checkpoint 22 (0.22.0; Windows pending):** adds `inspect-email --file message.eml` for offline
+  remain mismatches; recorded spend $0.13191725. The original ZIP was hash-verified and its
+  preflight plus all 16 receipts audited (provider billing still pending). These fictional,
+  model-assisted judgments do not establish broad phishing or malware accuracy; no labels or
+  expectations were changed.
+- **Checkpoint 22 (0.22.0; Windows validated):** adds `inspect-email --file message.eml` for offline
   structural triage. It shows actual/displayed link hosts, attachment-name signals and honest
   incomplete/unscanned states. No links are opened, attachment bytes extracted, model called or
   malware verdict issued. Adds 28 tests/16 mutants while retaining every prior assertion/mutant.
-  See [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md) for commands, limits and privacy. Defender integration
-  remains pending a local availability check and its own assignment. The current three-day build
+  See [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md) for commands, limits and privacy. Defender reports
+  Normal/active with no scan tested; integration needs its own assignment. The current three-day build
   plan prioritizes email/attachment utility and testing; historical calendar dates do not override it.
 
 Not established yet:
