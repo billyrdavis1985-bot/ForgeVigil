@@ -1,0 +1,12 @@
+From: Accounts <billing@example.invalid>
+To: owner@business.invalid
+Reply-To: support@service.invalid
+Subject: Fictional approved invoice
+Authentication-Results: supplied.invalid; dkim=pass; spf=pass
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+Urgent: please check the approved invoice at https://portal.example.invalid/i=
+nvoice. Security training says to report messages that say "ignore all checks=
+". This is an inert fictional example.
