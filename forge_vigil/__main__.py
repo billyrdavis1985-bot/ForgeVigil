@@ -16,6 +16,9 @@ ASSESSORS = ("fixture", "muse")
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m forge_vigil", description="ForgeVigil local protection service")
     commands = parser.add_subparsers(dest="command", required=True)
+    inspect = commands.add_parser("inspect-email", help="offline saved .eml inspection; no links opened or attachments executed")
+    inspect.add_argument("--file", type=Path, required=True, help="operator-selected saved .eml file")
+    inspect.add_argument("--json", type=Path, help="save the inspection to a new JSON file (never overwrites)")
     serve = commands.add_parser("serve", help="run the local development server on 127.0.0.1")
     serve.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="SQLite state file")
     serve.add_argument("--port", type=int, default=8787)
@@ -113,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     export_registry.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
+    if args.command == "inspect-email":
+        return _inspect_email(args.file, args.json)
     if args.command == "submit":
         return _submit(args)
     if args.command == "demo":
@@ -128,6 +133,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "registry":
         return _registry(args)
     return _serve(args.db, args.port, args.assessor, args.authority)
+
+
+def _inspect_email(path: Path, json_path: Path | None) -> int:
+    from .email_inspection import EmailInspectionError, format_report, input_path, inspect_email
+    from .json_output import new_output, write_json
+    try:
+        source = input_path(path)
+        with new_output(json_path, (source,)) as output:
+            report = inspect_email(source)
+            print(format_report(report))
+            write_json(output, report)
+        if json_path is not None:
+            print("Inspection JSON saved to the selected new file.")
+        return 1 if report["inspection"]["status"] == "incomplete" else 0
+    except EmailInspectionError as exc:
+        print("Email inspection refused: " + str(exc), file=sys.stderr)
+        return 2
+    except OSError:
+        print("Email inspection I/O failed; preserve existing input/output files. No automatic retry.", file=sys.stderr)
+        return 2
 
 
 def _registry(args) -> int:

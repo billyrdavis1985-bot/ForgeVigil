@@ -1,3 +1,81 @@
+# Current CP22 — saved-email structural inspection, 0.22.0; Windows pending
+
+Billy asked to continue useful offline work while away from his Windows PC.
+The current engineering window is three days, prioritizing phishing, malware and
+false-positive handling. This supersedes the historical four-day/calendar plan.
+CP22 implements the saved-email inspection slice only. Defender availability is
+unconfirmed and no scanner, mailbox integration, paid inference or model prompt
+change is part of this checkpoint. No commit/push/PR/merge is authorized.
+
+Base main commit: 20f1333808f1de93e0e9513a46dfeaac997d9a57 (merged CP20, version 0.20.1).
+Base tree: 45e1428099c71fcbb9803a529bba0386bf88f3e4. Version now 0.22.0: CP21 was
+measurement of 0.20.1 and intentionally made no application version change.
+
+## Observed implementation
+
+- Adds inspect-email --file saved.eml [--json new-file.json], documented in
+  EMAIL_INSPECTION.md, with two inert fictional examples under examples/emails/.
+- Offline MIME/header/link facts and attachment metadata; no HTML rendering,
+  network, model/AV call, attachment extraction or execution. Authentication-Results
+  remains an untrusted header claim. Reply-To differences/urgency alone are not
+  threat findings. Actual/displayed host differences and filename signals are
+  evidence for human triage, not a phishing verdict or file safety guarantee.
+- Reports incomplete/truncated/malformed content and unscanned attachments truthfully.
+  Limits bound input, headers, constructed MIME objects, traversal depth, body text,
+  link/attachment counts and display text. Sender addresses, subject/body text and
+  URL paths/queries/user-info are omitted. Domains/filenames/hashes remain sensitive.
+  JSON uses create-only reservation; input bytes remain unchanged.
+- New tests: 28; deliberate defects: 16. All 262 prior tests and 242 prior mutants
+  are retained unchanged. Total inventory: 290 tests / 258 mutants, 25 POSIX-only
+  mutants. New tests add two Windows skips; expected Windows is 290 tests/15 skipped
+  and 233/233 runnable mutants caught/25 skipped, not observed yet.
+- Full Linux/Python3.12.14 offline qualification PASS: 290 tests, zero skipped,
+  all 17 registry/Muse integrations, 258/258 deliberate defects caught, smoke demo,
+  operator drill (12 stages), registry drill (9 stages) and cleanup PASS. External
+  provider calls zero, billed spend 0.00 USD. Python3.13.5 passed the 28 new email
+  tests, zero skips; existing 3.13 base-suite evidence remains historical.
+  No Windows validation or real scanner result is claimed.
+- Source fingerprint 76a05e739675e24cb5a4df84d71c89386e9763e7c1fa91397c0b488495fda5f7.
+  A separate CP22 source freeze, seal
+  708a39369f1bb12191fe776b3ebc9f6d5304345a5863d9c8c56ae985c167e0bf,
+  retains identical requests/context/judgments to the original 0.20.1 pack. Original
+  packs/records are preserved. Its fixture FAIL reproduces the exact old score:
+  five attack deliveries and six mismatches; this is not new Muse evidence.
+- Documentation changed after full qualification only to record observed results;
+  qualified program/source pins remain unchanged. No rerun is claimed for those
+  documentation edits. All cloud and baseline records are included in the package.
+- Policy, evidence verifier, Muse prompts, review/release, store, digests, registry,
+  request/receipt/database schemas, dependencies, existing cases and JSON output
+  implementation remain byte-identical to merged CP20. Only high-risk file changed
+  is tools/mutation_check.py, appending 16 entries. Preservation record is packaged.
+
+## CP21 console result and remaining evidence
+
+Billy supplied 16 completed live case results: 6/6 attacks flagged, zero attack
+outbox deliveries, 0/7 benign threat flags, zero model failures, 3/3 scope denials
+before assessment, 14/16 exact disposition matches; recorded spend 0.13191725 USD.
+Case04 BLOCK versus frozen REVIEW and case09 REVIEW versus frozen BLOCK remain
+mismatches. All expectations remain unchanged. These are small fictional,
+model-assisted judgments; they do not establish broad phishing/malware accuracy.
+
+Original ZIP/receipt/preflight inspection remains pending. Operator-reported file:
+C:\dev\ForgeVigil\var\qualification\cp21-muse-authorized-evidence.zip
+SHA256 03335b65fc67f349f116d9e7f2cd709f2a04005a86f9918add6d2a08fc00d3a6.
+The one authorized invocation is consumed. Preserve the marker and do not rerun.
+No new paid inference is authorized in CP22.
+
+## Next steps
+
+Cloud qualification has passed. Package the exact patch with a guarded offline
+Windows installer; Windows application/validation remains pending. On Billy's PC: preserve existing state, apply only on clean
+exact base, qualify, retain original Windows JSON/logs and inspect the staged
+result. Publishing remains a separate specific approval. At most this one new
+application layer is pending Windows validation. Defender integration follows
+only after its status/mode is known and its own scope is assigned. No dashboard,
+second model, hosting, external delivery or automated remediation is added here.
+
+## Historical handoff — superseded current-state instructions
+
 # HANDOFF: ForgeVigil
 
 ## Current CP20 Windows repair — 0.20.1, October 29, 2026

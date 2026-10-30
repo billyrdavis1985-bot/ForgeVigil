@@ -1,0 +1,38 @@
+From: Accounts <billing@example.invalid>
+To: owner@business.invalid
+Reply-To: payments@different.invalid
+Subject: Fictional link and filename signals
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============8562551736867005830=="
+
+--===============8562551736867005830==
+Content-Type: multipart/alternative;
+ boundary="===============6793124744572155974=="
+
+--===============6793124744572155974==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Fictional structural-inspection example. The attached bytes are harmless text=
+, not a program.
+
+--===============6793124744572155974==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<p>Fictional example.</p><a href=3D"https://portal.example.invalid@different.=
+invalid/pay?token=3Dfictional-private-token">https://portal.example.invalid/p=
+ay</a>
+
+--===============6793124744572155974==--
+
+--===============8562551736867005830==
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="../../invoice.pdf.exe"
+MIME-Version: 1.0
+
+SGFybWxlc3MgZmljdGlvbmFsIGZpeHR1cmUgYnl0ZXMuIE5vdCBhbiBleGVjdXRhYmxlLg==
+
+--===============8562551736867005830==--

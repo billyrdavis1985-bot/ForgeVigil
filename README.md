@@ -2,8 +2,10 @@
 
 ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
 deterministic code decides, delivery stays in a local outbox, and every result leaves a durable receipt.
+It also inspects saved `.eml` files locally for structural link and attachment-name signals;
+see [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md). That command performs no AI or antivirus scan.
 
-> **Scope:** a local document-request protection prototype. Bounded read-only investigation, fixed
+> **Scope:** local document-request controls and offline saved-email inspection. Bounded read-only investigation, fixed
 > permissions and local human review; malware defense, public hosting and enterprise scalability
 > have not been demonstrated.
 
@@ -189,6 +191,20 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   dependencies, shipped cases and confirmed judgments are unchanged. See [HANDOFF.md](HANDOFF.md)
   for evidence, exact staged-state repair and the four-day engineering plan.
 
+- **Checkpoint 21 (measurement; no code version change):** Billy supplied the completed live
+  16-case console: 6/6 attack flags, zero attack deliveries, 0/7 benign threat flags, zero model
+  failures, three scope denials before assessment and 14/16 exact disposition matches. Cases04/09
+  remain mismatches; recorded spend $0.13191725. The original ZIP/receipts have not yet been
+  inspected in this workspace. These fictional, model-assisted judgments do not establish broad
+  phishing or malware accuracy; no labels or expectations were changed.
+- **Checkpoint 22 (0.22.0; Windows pending):** adds `inspect-email --file message.eml` for offline
+  structural triage. It shows actual/displayed link hosts, attachment-name signals and honest
+  incomplete/unscanned states. No links are opened, attachment bytes extracted, model called or
+  malware verdict issued. Adds 28 tests/16 mutants while retaining every prior assertion/mutant.
+  See [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md) for commands, limits and privacy. Defender integration
+  remains pending a local availability check and its own assignment. The current three-day build
+  plan prioritizes email/attachment utility and testing; historical calendar dates do not override it.
+
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
   the same author as the policy, is still small, and verdicts vary between runs.
@@ -200,7 +216,7 @@ Not established yet:
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 262 tests; temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 290 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
