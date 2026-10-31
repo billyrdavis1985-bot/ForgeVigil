@@ -1,0 +1,29 @@
+# Offline qualification on every push and pull request.
+#
+# Runs the repository's own gate: suite, deliberate-defect check, drills,
+# demo, and cleanup. Stdlib only, no installs, no secrets, no provider calls.
+name: offline-qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  qualify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Offline qualification gate
+        run: python tools/qualification_check.py

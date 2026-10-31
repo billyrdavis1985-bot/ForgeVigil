@@ -222,7 +222,7 @@ Not established yet:
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 290 tests; temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 324 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -232,6 +232,10 @@ python3 tools/operator_drill.py                  # disposable fixture workflow, 
 python3 tools/registry_drill.py                  # configured-registry workflow on fresh fictional fixture state
 python3 tools/qualification_check.py             # one offline control run and a new JSON results record
 ```
+
+GitHub Actions runs `tools/qualification_check.py` on every push to `main` and every
+pull request (Linux and Windows, Python 3.11 and 3.13). See
+[.github/workflows/qual.yml](.github/workflows/qual.yml).
 
 The next commands start a persistent local development server. It binds to 127.0.0.1 only.
 Use the default fictional registry for rehearsal; read [REGISTRY.md](REGISTRY.md) before real traffic.
