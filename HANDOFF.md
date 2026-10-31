@@ -145,6 +145,41 @@ follows only after its own scope is assigned; status/mode is operator-reported.
 No dashboard, second model, hosting, external delivery or automated remediation
 is added here.
 
+## Proposed side task — forgevigil.com website (uncommitted; operator decision pending)
+
+Requested by the operator on 2026-10-31 as optional work alongside the hackathon project; the operator
+decides whether it enters the repository and, separately, whether it is deployed. Not a checkpoint:
+code version, policy, prompts, schemas, fixtures, cases, receipts, store, existing tests and
+`tools/mutation_check.py` are unchanged.
+
+Base main commit: 315ae7efb1a7d57e3421f6069708b1e24e59b3d7 (merged CP23 deprecation sweep, 0.23.0).
+
+- Adds `website/` (`build.py`, `content.py`, `static/`, `README.md`), `tests/test_site.py`,
+  `.github/workflows/website.yml`, one `.gitignore` line (`website/dist/`) and one README layout row.
+  Standard library only; no new dependencies. Fonts: IBM Plex woff2 under the SIL Open Font License.
+- The walkthrough calls `forge_vigil.policy.decide()` on 17 shipped cases at build time. Selection
+  criteria are published on the page and enforced by test: every label, scope-denial reason and
+  approval state in the shipped set, and every case with a measured note (including
+  `attack-credential-request`, the current prompt's one main-set delivery).
+- Measured figures in `content.py` carry SHA-256 pins in `tests/test_site.py` (append-only), and each
+  headline figure must trace to a recorded run. The CP21 run is labelled by its recorded preflight
+  pins (commit 20f1333, prompt v5), not a code version.
+- Release: Cloudflare Pages builds only the `website` branch with
+  `python3 -B -m unittest tests.test_site && python3 -B website/build.py --release`; `--release`
+  refuses an unknown commit, uncommitted changes, or a commit other than `CF_PAGES_COMMIT_SHA`.
+  `website-build` CI runs the same command on Python 3.13. Nothing has been deployed.
+- Observed 2026-10-31, cloud workspace (Linux), with this change applied: qualification PASS on
+  Python 3.11 and on 3.13 — 340 tests (326 existing + 14 site tests), 271/271 deliberate defects
+  caught, demo, both drills and cleanup PASS, zero provider calls. Simulated Pages build (fresh clone
+  of 315ae7e + this patch, one scratch commit never pushed, Python 3.13, `CF_PAGES_COMMIT_SHA` set):
+  14 site tests OK, release build stamped with that commit; the same command refused a mismatched
+  `CF_PAGES_COMMIT_SHA` and an uncommitted change. Seven deliberate site defects (hidden gap row,
+  inline style, removed caveat, edited recorded figure, inflated headline, dropped credential case,
+  dropped scope path) were each caught by `tests.test_site`; no mutant was added to
+  `tools/mutation_check.py`.
+- Not yet observed: Windows qualification with this change, the `website-build` and
+  `offline-qualification` GitHub Actions runs, and a real Cloudflare Pages preview build.
+
 ## Historical handoff — superseded current-state instructions
 
 # HANDOFF: ForgeVigil
