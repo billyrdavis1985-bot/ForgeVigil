@@ -13,11 +13,10 @@ Base main commit: 315ae7efb1a7d57e3421f6069708b1e24e59b3d7 (merged CP23, version
 Version now 0.24.0.
 
 - New tests: 7; deliberate defects: 8. All prior tests and mutants are
-  retained unchanged. Total inventory: 333 tests / 279 mutants.
-- Linux qualification PASS: 333 tests, 279/279 mutants, both drills,
-  cleanup, zero provider calls.
+  retained unchanged. Branch inventory: 333 tests / 279 mutants.
+- Merged main (nits PR #10 + dashboard PR #11): 339 tests, 285/285
+  mutants, both drills, cleanup, zero provider calls. Linux qual PASS.
 - Windows validation pending operator run.
-- Prepared as `dashboard-v1` for operator review; push and merge are the operator's.
 
 # Prior CP23 — one-file Defender scan, 0.23.0; Windows validated, original JSON audited
 
@@ -37,7 +36,7 @@ Base tree: 047250c701c9b5c8e769feb58c8b79e2f1a938a5. Version now 0.23.0.
 - New tests: 34 (stub-engine harness; real-engine behavior proven only by
   operator PC evidence); deliberate defects: 13. All prior tests and mutants
   are retained unchanged. Total inventory at merge: 324 tests / 271 mutants.
-- Nits batch (unmerged): unknown-schema refusal before the journal-mode flip,
+- Nits batch (merged as PR #10): unknown-schema refusal before the journal-mode flip,
   loud spend resolution, key symlink refusal, versioned server string, default
   journal export protection; 6 tests, 6 mutants. One existing export mock
   narrowed to creation calls with intent preserved (see PR).
