@@ -227,7 +227,7 @@ Not established yet:
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 324 tests; temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 332 tests; temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case

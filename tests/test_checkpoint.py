@@ -190,6 +190,13 @@ class RequestBoundaryTests(_TempStateTest):
         self.assertEqual(assessor.calls, 0)
         self.assertNothingRecorded(harness)
 
+    def test_server_header_names_the_current_version(self):
+        from forge_vigil.versions import CODE_VERSION
+
+        harness = self.harness()
+        _, _, response = harness.request("GET", "/health")
+        self.assertEqual(response.getheader("Server").strip(), f"ForgeVigil-{CODE_VERSION}")
+
     def test_only_local_routes_are_exposed(self):
         harness = self.harness()
         self.assertEqual(harness.server.server_address[0], "127.0.0.1")
