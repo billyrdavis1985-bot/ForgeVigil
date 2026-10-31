@@ -213,7 +213,7 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
 - **Checkpoint 24 (0.24.0):** adds `dashboard --out page.html`, a read-only one-file HTML
   export of a database: counts, dispositions, reviews, spend, per-request detail and outbox,
   with the data embedded for offline viewing. No server, no JavaScript, no request text, key
-  material, reviewer names, evidence quotes, or absolute paths. Adds 6 tests/6 mutants while
+  material, reviewer names, evidence quotes, or absolute paths. Adds 7 tests/8 mutants while
   retaining every prior assertion/mutant. See [DASHBOARD.md](DASHBOARD.md).
 
 Not established yet:

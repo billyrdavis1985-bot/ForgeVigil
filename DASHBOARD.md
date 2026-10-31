@@ -21,11 +21,16 @@ python -m forge_vigil dashboard --db var/forgevigil.sqlite3 --out /tmp/fv-dashbo
 ## What the page shows
 
 Summary counts (requests by disposition, deliveries allowed vs released,
-reviews pending vs decided, failed assessments, settled vs open spend),
-one expandable row per request (disposition, reason code, approval,
-assessment status, usage, review outcome), and the outbox (document,
-recipient, bytes, SHA-256). The same data is embedded as a JSON blob so
-the page stays useful offline and diffable.
+reviews pending vs decided, failed assessments, spend settled vs unknown
+vs in flight in dollars), one expandable row per request (disposition,
+reason code, approval, assessment status, usage, review outcome), and
+the outbox (request, document, recipient, allowed vs released, bytes,
+SHA-256). Undecided REVIEW/BLOCK rows sort first so the operator's work
+tops the page; final ALLOW/DENY rows say "none (final)", never pending.
+The summary also proves the source database was unchanged: its bytes are
+fingerprinted before and after the read, and any mid-export change is
+reported on the page instead of silently mixed in. The same data is
+embedded as a JSON blob so the page stays useful offline and diffable.
 
 ## What it never contains
 

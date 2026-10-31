@@ -12,9 +12,9 @@ Policy, prompts, schemas, receipts, and the store are untouched.
 Base main commit: 315ae7efb1a7d57e3421f6069708b1e24e59b3d7 (merged CP23, version 0.23.0).
 Version now 0.24.0.
 
-- New tests: 6; deliberate defects: 6. All prior tests and mutants are
-  retained unchanged. Total inventory: 332 tests / 277 mutants.
-- Linux qualification PASS: 332 tests, 277/277 mutants, both drills,
+- New tests: 7; deliberate defects: 8. All prior tests and mutants are
+  retained unchanged. Total inventory: 333 tests / 279 mutants.
+- Linux qualification PASS: 333 tests, 279/279 mutants, both drills,
   cleanup, zero provider calls.
 - Windows validation pending operator run.
 - Prepared as `dashboard-v1` for operator review; push and merge are the operator's.

@@ -85,11 +85,41 @@ class DashboardTests(unittest.TestCase):
             "reviews_pending": 4,
             "reviews_decided": {"confirm": 1, "false_positive": 1, "reject": 1, "release": 1},
             "assessments_failed": 1,
-            "spend_settled_nanousd": 1_250_000,
-            "spend_open_nanousd": 7_000_000,
+            "spend_settled_nanousd": 1_250_000, "spend_settled_usd": "0.00125",
+            "spend_unknown_nanousd": 5_000_000, "spend_unknown_usd": "0.005",
+            "spend_inflight_nanousd": 2_000_000, "spend_inflight_usd": "0.002",
         })
         self.assertEqual(len(snapshot["requests"]), 10)
-        self.assertEqual(len(snapshot["outbox"]), 2)
+        # Undecided REVIEW/BLOCK first, then everything else.
+        first_four = {r["request_id"] for r in snapshot["requests"][:4]}
+        self.assertEqual(first_four, {"req-held-3", "req-blocked-3", "req-unverified", "req-invalid"})
+        rest = {r["request_id"] for r in snapshot["requests"][4:]}
+        self.assertEqual(len(rest), 6)
+        self.assertTrue(first_four.isdisjoint(rest))
+        outbox = {(i["request_id"], i["released"]) for i in snapshot["outbox"]}
+        self.assertEqual(outbox, {("req-allowed", False), ("req-held-1", True)})
+        source = snapshot["source_db"]
+        self.assertEqual(set(source), {"byte_size", "sha256_before", "sha256_after", "unchanged"})
+        self.assertTrue(source["unchanged"])
+        self.assertEqual(source["sha256_before"], source["sha256_after"])
+        self.assertEqual(len(source["sha256_after"]), 64)
+        self.assertGreater(source["byte_size"], 0)
+
+    def test_page_states_finality_spend_and_source_honestly(self):
+        self.populate()
+        page = render_html(build_snapshot(Store(self.db_path, read_only=True)))
+        # Only undecided REVIEW/BLOCK rows may say pending; final rows say so.
+        self.assertEqual(page.count(">pending<"), 4)
+        self.assertEqual(page.count("none (final)"), 2)
+        self.assertIn("not called (scope checks decided before any assessment)", page)
+        self.assertIn("<code>none</code>", page)  # missing approval prints as none
+        self.assertNotIn("(evidence: )", page)
+        self.assertIn("$0.00125", page)
+        self.assertIn("Spend unknown usage", page)
+        self.assertIn("Database unchanged", page)
+        self.assertIn("verified before/after", page)
+        self.assertIn('class="disposition d-REVIEW"', page)
+        self.assertIn("python -m forge_vigil dashboard --db var/forgevigil.sqlite3 --out dashboard.html", page)
 
     def test_snapshot_and_page_carry_no_private_material(self):
         self.populate()
@@ -108,7 +138,11 @@ class DashboardTests(unittest.TestCase):
             "summary": {"requests_total": 1, "by_disposition": {"ALLOW": 1, "BLOCK": 0, "DENY": 0, "REVIEW": 0},
                         "deliveries_total": 0, "deliveries_allowed": 0, "deliveries_released": 0,
                         "reviews_pending": 0, "reviews_decided": {}, "assessments_failed": 0,
-                        "spend_settled_nanousd": 0, "spend_open_nanousd": 0},
+                        "spend_settled_nanousd": 0, "spend_settled_usd": "0.00",
+                        "spend_unknown_nanousd": 0, "spend_unknown_usd": "0.00",
+                        "spend_inflight_nanousd": 0, "spend_inflight_usd": "0.00"},
+            "source_db": {"byte_size": 1, "sha256_before": "a" * 64,
+                          "sha256_after": "a" * 64, "unchanged": True},
             "requests": [{
                 "request_id": 'r1"><script>alert(1)</script>', "actor_id": "a&b",
                 "document_id": "d1", "recipient_id": "r", "approval_ref": "x",
