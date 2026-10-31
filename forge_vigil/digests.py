@@ -84,10 +84,17 @@ def key_path_for(db_path: Path) -> Path:
 def load_key(db_path: Path) -> bytes | None:
     """The key for this database, or None if its key file does not exist."""
     path = key_path_for(db_path)
+    if path.is_symlink():
+        raise DigestKeyError(f"the digest key {path} is a link; refusing to follow it")
     try:
-        text = path.read_text(encoding="ascii").strip()
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
     except FileNotFoundError:
         return None
+    except OSError as exc:
+        raise DigestKeyError(f"cannot read the digest key {path} ({exc})") from None
+    try:
+        with os.fdopen(fd, "r", encoding="ascii") as handle:
+            text = handle.read().strip()
     except (OSError, UnicodeDecodeError) as exc:
         raise DigestKeyError(f"cannot read the digest key {path} ({exc})") from None
     try:

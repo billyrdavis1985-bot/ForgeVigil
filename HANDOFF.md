@@ -15,7 +15,11 @@ Base tree: 047250c701c9b5c8e769feb58c8b79e2f1a938a5. Version now 0.23.0.
 
 - New tests: 34 (stub-engine harness; real-engine behavior proven only by
   operator PC evidence); deliberate defects: 13. All prior tests and mutants
-  are retained unchanged. Total inventory: 324 tests / 271 mutants.
+  are retained unchanged. Total inventory at merge: 324 tests / 271 mutants.
+- Nits batch (unmerged): unknown-schema refusal before the journal-mode flip,
+  loud spend resolution, key symlink refusal, versioned server string, default
+  journal export protection; 6 tests, 6 mutants. One existing export mock
+  narrowed to creation calls with intent preserved (see PR).
 - Linux qualification PASS: 324 tests, 271/271 mutants, both drills, cleanup,
   zero provider calls.
 - Windows validation observed and original JSON audited 2026-10-30: win32,
@@ -26,8 +30,10 @@ Base tree: 047250c701c9b5c8e769feb58c8b79e2f1a938a5. Version now 0.23.0.
   `no_detection_reported`, input hash matches the Windows CRLF bytes.
   Evidence: `C:\dev\ForgeVigil\var\cp23-smoke-scan.json` and the
   qualification record under the operator's temp results directory.
-- EICAR detection-branch calibration remains an optional operator step.
-  Pushed as `cp23-scanner` for operator review; merge is the operator's.
+- EICAR calibration observed 2026-10-31: real-engine scan of the canonical
+  68-byte string reported `detected` (exit 2, `Virus:DOS/EICAR_Test_File`,
+  hash `275a021b…`); record at `var/eicar-scan.json`, file removed after.
+  CP23 merged as PR #6.
 
 # Prior CP22 — saved-email structural inspection, 0.22.0; Windows validated, original JSON audited
 

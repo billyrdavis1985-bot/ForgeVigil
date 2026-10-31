@@ -72,6 +72,21 @@ class JsonOutputTests(unittest.TestCase):
                 self.assertEqual(_report(self.db, path), 2)
                 self.assertEqual(path.read_bytes() if path.exists() else None, before)
 
+    def test_report_protects_the_default_journal_destination(self):
+        destination = Path("var/sent.jsonl").resolve()
+        # The parent must exist so the refusal comes from the protected list,
+        # not from the missing-parent pre-check.
+        created_parent = not destination.parent.exists()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if created_parent:
+            self.addCleanup(lambda: destination.parent.rmdir() if not any(destination.parent.iterdir()) else None)
+        before = destination.read_bytes() if destination.exists() else None
+        with redirect_stderr(io.StringIO()), patch(
+            "forge_vigil.report.build_report", side_effect=AssertionError("must refuse before reading")
+        ):
+            self.assertEqual(_report(self.db, destination), 2)
+            self.assertEqual(destination.read_bytes() if destination.exists() else None, before)
+
     def test_eval_refuses_input_cases_and_registry_before_assessment(self):
         cases = self.tmp / "cases.json"
         cases.write_bytes(CASES_PATH.read_bytes())
