@@ -29,6 +29,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class JsonOutputTests(unittest.TestCase):
+    def test_reserved_name_check_has_no_deprecation(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            self.assertTrue(json_output._is_reserved_name("NUL"))
+            self.assertFalse(json_output._is_reserved_name("report.json"))
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="forgevigil-json-output-")
         self.addCleanup(tmp.cleanup)

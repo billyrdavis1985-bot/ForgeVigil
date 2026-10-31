@@ -8,7 +8,9 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+import ntpath
 import os
+import warnings
 from pathlib import Path, PureWindowsPath
 import re
 import stat
@@ -32,6 +34,21 @@ MAX_ATTACHMENTS = 25
 MAX_URL_CHARS = 2048
 MAX_NAME_CHARS = 200
 _IS_WINDOWS = os.name == "nt"
+
+
+def _is_reserved_name(part: str) -> bool:
+    """Windows reserved-name check without deprecated APIs.
+
+    ntpath.isreserved exists on every platform; the pathlib spelling is
+    deprecated on 3.14 and gone on 3.15. The fallback covers interpreters
+    predating ntpath.isreserved.
+    """
+    isreserved = getattr(ntpath, "isreserved", None)
+    if isreserved is not None:
+        return bool(isreserved(part))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return bool(PureWindowsPath(part).is_reserved())
 _WEB_URL = re.compile(r"https?://[^\s<>\"']+", re.I)
 _ACTIVE_SUFFIXES = frozenset({"exe", "com", "scr", "bat", "cmd", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "lnk", "msi", "dll", "jar", "chm"})
 _MACRO_SUFFIXES = frozenset({"docm", "xlsm", "pptm", "dotm", "xltm", "potm"})
@@ -50,7 +67,7 @@ def input_path(value: Path) -> Path:
     windows = PureWindowsPath(value)
     parts = windows.parts[1:] if windows.anchor else windows.parts
     if _IS_WINDOWS and (str(windows).startswith(("\\\\.\\", "\\\\?\\")) or any(
-        ":" in part or part.endswith((".", " ")) or PureWindowsPath(part).is_reserved()
+        ":" in part or part.endswith((".", " ")) or _is_reserved_name(part)
         for part in parts if part != ".."
     )):
         raise EmailInspectionError("UNSUPPORTED_WINDOWS_INPUT_NAME")
@@ -215,7 +232,7 @@ def _attachment(part, index, issues):
             signals.append("ATTACHMENT_PATH_LIKE_NAME")
         if any(c in _BIDI or ord(c) < 32 or ord(c) == 127 for c in name):
             signals.append("ATTACHMENT_CONTROL_CHARACTERS")
-        if name.endswith((".", " ")) or PureWindowsPath(name).is_reserved():
+        if name.endswith((".", " ")) or _is_reserved_name(name):
             signals.append("ATTACHMENT_AMBIGUOUS_WINDOWS_NAME")
         suffix = name.rstrip(". ").rsplit(".", 1)[-1].lower() if "." in name else ""
         if suffix in _ACTIVE_SUFFIXES:

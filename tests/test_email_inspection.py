@@ -47,6 +47,14 @@ class EmailInspectionTests(unittest.TestCase):
         self.source.write_bytes(value.as_bytes())
         return self.source
 
+    def test_reserved_name_check_has_no_deprecation(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            self.assertTrue(mail._is_reserved_name("COM1"))
+            self.assertFalse(mail._is_reserved_name("invoice.pdf"))
+
     def test_benign_urgency_training_and_reply_to_difference_are_not_threat_verdicts(self):
         value = message('URGENT legitimate invoice. Security training says report "ignore all checks" messages.',
                         reply="support@service.invalid")
