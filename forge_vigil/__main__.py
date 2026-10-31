@@ -19,6 +19,10 @@ def main(argv: list[str] | None = None) -> int:
     inspect = commands.add_parser("inspect-email", help="offline saved .eml inspection; no links opened or attachments executed")
     inspect.add_argument("--file", type=Path, required=True, help="operator-selected saved .eml file")
     inspect.add_argument("--json", type=Path, help="save the inspection to a new JSON file (never overwrites)")
+    scan = commands.add_parser("scan-file", help="one fixed custom antivirus scan of an operator-selected file")
+    scan.add_argument("--file", type=Path, required=True, help="operator-selected local file to scan")
+    scan.add_argument("--json", type=Path, help="save the scan report to a new JSON file (never overwrites)")
+    scan.add_argument("--timeout-s", type=float, default=600.0, help="process wait bound in seconds (1-3600)")
     serve = commands.add_parser("serve", help="run the local development server on 127.0.0.1")
     serve.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="SQLite state file")
     serve.add_argument("--port", type=int, default=8787)
@@ -118,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "inspect-email":
         return _inspect_email(args.file, args.json)
+    if args.command == "scan-file":
+        return _scan_file(args.file, args.json, args.timeout_s)
     if args.command == "submit":
         return _submit(args)
     if args.command == "demo":
@@ -152,6 +158,26 @@ def _inspect_email(path: Path, json_path: Path | None) -> int:
         return 2
     except OSError:
         print("Email inspection I/O failed; preserve existing input/output files. No automatic retry.", file=sys.stderr)
+        return 2
+
+
+def _scan_file(path: Path, json_path: Path | None, timeout_s: float, _engine_command=None) -> int:
+    from .json_output import new_output, write_json
+    from .scan import DECISIVE_OUTCOMES, ScanError, format_report, input_path, scan_file
+    try:
+        source = input_path(str(path))
+        with new_output(json_path, (source,)) as output:
+            report = scan_file(source, timeout_s=timeout_s, engine_command=_engine_command)
+            print(format_report(report))
+            write_json(output, report)
+        if json_path is not None:
+            print("Scan report JSON saved to the selected new file.")
+        return 0 if report["outcome"] in DECISIVE_OUTCOMES else 1
+    except ScanError as exc:
+        print("File scan refused: " + str(exc), file=sys.stderr)
+        return 2
+    except OSError:
+        print("File scan I/O failed; preserve existing input/output files. No automatic retry.", file=sys.stderr)
         return 2
 
 
