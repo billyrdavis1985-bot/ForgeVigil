@@ -9,12 +9,29 @@ from __future__ import annotations
 
 import errno
 import json
+import ntpath
 import os
+import warnings
 from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
 from typing import TextIO
 
 _IS_WINDOWS = os.name == "nt"
+
+
+def _is_reserved_name(part: str) -> bool:
+    """Windows reserved-name check without deprecated APIs.
+
+    ntpath.isreserved exists on every platform; the pathlib spelling is
+    deprecated on 3.14 and gone on 3.15. The fallback covers interpreters
+    predating ntpath.isreserved.
+    """
+    isreserved = getattr(ntpath, "isreserved", None)
+    if isreserved is not None:
+        return bool(isreserved(part))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return bool(PureWindowsPath(part).is_reserved())
 
 
 def check_output(path: Path | None, protected=()) -> Path | None:
@@ -29,7 +46,7 @@ def check_output(path: Path | None, protected=()) -> Path | None:
     windows = PureWindowsPath(path)
     windows_parts = windows.parts[1:] if windows.anchor else windows.parts
     if _IS_WINDOWS and any(
-        ":" in part or part.endswith((".", " ")) or PureWindowsPath(part).is_reserved()
+        ":" in part or part.endswith((".", " ")) or _is_reserved_name(part)
         for part in windows_parts if part != ".."
     ):
         raise OSError(errno.EINVAL, "reserved Windows output name", str(path))
