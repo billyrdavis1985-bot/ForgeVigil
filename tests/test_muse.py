@@ -417,6 +417,27 @@ class SpendControlTests(_MuseTest):
         self.assertEqual(self.api.requests, [])
         self.assertEqual(service.store.spend_entries(), [])
 
+    def test_resolving_a_closed_or_unknown_reservation_is_loud(self):
+        path = self.tmp / "loud.sqlite3"
+        store = Store(path)
+        claim = store.claim(
+            actor_id="operator", request_id="req-loud", input_digest="sha256:x", document_id="public-spec",
+            recipient_id="supplier", approval_ref=None, adapter_id="muse.test", received_at="2026-10-26T00:00:00Z",
+        )
+        rid = store.reserve_spend(
+            actor_id="operator", request_id="req-loud", attempt_id=claim.attempt_id, model="m",
+            amount_nanousd=600, cap_nanousd=1000, created_at="2026-10-26T00:00:01Z",
+        )
+        store.settle_spend(rid, actual_nanousd=100, input_tokens=10, output_tokens=1, resolved_at="t")
+        with self.assertRaises(ValueError):
+            store.settle_spend(rid, actual_nanousd=999, input_tokens=1, output_tokens=1, resolved_at="t")
+        with self.assertRaises(ValueError):
+            store.mark_spend_unknown(rid, resolved_at="t")
+        with self.assertRaises(ValueError):
+            store.settle_spend("sp_no_such", actual_nanousd=1, input_tokens=1, output_tokens=1, resolved_at="t")
+        with self.assertRaises(ValueError):
+            store.mark_spend_unknown("sp_no_such", resolved_at="t")
+
     def test_ledger_counts_reservations_until_settled_and_entries_are_final(self):
         path = self.tmp / "ledger.sqlite3"
         store = Store(path)
@@ -465,6 +486,24 @@ class SpendControlTests(_MuseTest):
         with self.assertRaises(RuntimeError):
             Store(path)
         self.assertEqual(schema_version(path), "9")  # refused before anything was written
+
+    def test_refused_unknown_schema_leaves_file_and_journal_mode_untouched(self):
+        path = self.tmp / "foreign.sqlite3"
+        Store(path)
+        conn = sqlite3.connect(path)
+        conn.execute("PRAGMA journal_mode=DELETE")
+        conn.execute("UPDATE meta SET value = '9' WHERE key = 'store_schema'")
+        conn.commit()
+        conn.close()
+        before = path.read_bytes()
+        with self.assertRaises(RuntimeError):
+            Store(path)
+        self.assertEqual(path.read_bytes(), before)
+        conn = sqlite3.connect(path)
+        try:
+            self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0].lower(), "delete")
+        finally:
+            conn.close()
 
     def test_restart_counts_in_flight_spend_as_unknown(self):
         service = self.service()

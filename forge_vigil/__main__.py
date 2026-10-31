@@ -301,8 +301,11 @@ def _report(db_path: Path, json_path: Path | None) -> int:
         print(f"refusing to run: {problem}", file=sys.stderr)
         return 2
     # Even absent SQLite side files and the key/lock namespace are not export targets.
+    # The default journal is protected too: a report planted where the journal will
+    # append would corrupt it. Custom --journal paths stay operator-managed.
     canonical_db = db_path.resolve()
     protected = [Path(str(canonical_db) + suffix) for suffix in ("", ".key", ".lock", "-wal", "-shm", "-journal")]
+    protected.append(Path("var/sent.jsonl").resolve())
     reported = False
     try:
         with new_output(json_path, protected) as destination:

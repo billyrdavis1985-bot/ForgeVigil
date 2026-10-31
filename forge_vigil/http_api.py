@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 
 from .errors import ConfigError
+from .versions import CODE_VERSION
 from .schema import ID_PATTERN, MAX_BODY_BYTES, RequestValidationError, parse_request
 from .service import CONFLICT, DECIDED, IN_PROGRESS, REPLAYED, ForgeVigilService, Outcome
 
@@ -116,7 +117,7 @@ def render_outcome(outcome: Outcome) -> tuple[int, dict, dict]:
 
 class _Handler(BaseHTTPRequestHandler):
     server: ForgeVigilHTTPServer
-    server_version = "ForgeVigil-CP01"
+    server_version = f"ForgeVigil-{CODE_VERSION}"
     sys_version = ""
     timeout = 10  # seconds per socket operation; bounds slow clients
 

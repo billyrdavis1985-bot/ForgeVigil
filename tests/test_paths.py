@@ -257,7 +257,8 @@ class PathSafetyTests(unittest.TestCase):
         with mock.patch.object(cases_module.os, "open", wraps=os.open) as opened:
             with self.assertRaises(ExportError) as caught:
                 self.export(cases)
-            opened.assert_not_called()  # an invalid destination is refused before temporary-file creation
+            creations = [c for c in opened.mock_calls if len(c.args) > 1 and c.args[1] & os.O_CREAT]
+            self.assertEqual(creations, [])  # an invalid destination is refused before temporary-file creation
         self.assertEqual(caught.exception.code, "invalid_cases_file")
         self.assertTrue(cases.is_symlink())
         self.assertEqual(victim.read_bytes(), before)

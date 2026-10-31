@@ -24,6 +24,7 @@ from forge_vigil.digests import (
     key_path_for,
     keyed_digest,
     legacy_digest,
+    load_key,
     load_or_create_key,
 )
 from forge_vigil.fixtures import default_fixtures
@@ -117,6 +118,20 @@ class DigestTests(unittest.TestCase):
         key_path_for(self.db_path).unlink()  # nothing keyed yet, so nothing depends on the old key
         self.assertEqual(self.submit(self.service()).kind, REPLAYED)
         self.assertTrue(key_path_for(self.db_path).exists())
+
+    def test_a_flagged_link_key_is_refused_without_reading(self):
+        with mock.patch.object(Path, "is_symlink", return_value=True):
+            with self.assertRaises(DigestKeyError) as caught:
+                load_key(self.db_path)
+        self.assertIn("link", str(caught.exception))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX links")
+    def test_a_symlinked_key_is_refused(self):
+        elsewhere = self.tmp / "elsewhere.key"
+        elsewhere.write_text("ab" * 32 + "\n", encoding="ascii")
+        key_path_for(self.db_path).symlink_to(elsewhere)
+        with self.assertRaises(DigestKeyError):
+            load_key(self.db_path)
 
     def test_a_malformed_key_is_refused(self):
         key_path_for(self.db_path).write_text("not a key\n", encoding="ascii")

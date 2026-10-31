@@ -903,6 +903,43 @@ MUTANTS: tuple[Mutant, ...] = (
              '        return 1 if report["outcome"] in DECISIVE_OUTCOMES else 0'),),
            'tests.test_scan.CliTests.test_cli_decisive_is_zero'),
 
+    Mutant('nits unknown store version check removed', 'forge_vigil/store.py',
+           (('        if version not in _MIGRATABLE_VERSIONS:\n'
+             '            # Before any write, including the journal-mode flip: an unknown store is refused untouched.\n'
+             "            raise RuntimeError(f\"unsupported store schema {version!r}; refusing to migrate implicitly\")",
+             '        pass  # version check removed'),),
+           'tests.test_muse.SpendControlTests.test_refused_unknown_schema_leaves_file_and_journal_mode_untouched'),
+
+    Mutant('nits double settle silently ignored', 'forge_vigil/store.py',
+           (('                (actual_nanousd, input_tokens, output_tokens, resolved_at, reservation_id),\n'
+             '            )\n'
+             '            if cursor.rowcount != 1:',
+             '                (actual_nanousd, input_tokens, output_tokens, resolved_at, reservation_id),\n'
+             '            )\n'
+             '            if False:'),),
+           'tests.test_muse.SpendControlTests.test_resolving_a_closed_or_unknown_reservation_is_loud'),
+
+    Mutant('nits unknown spend resolution silently ignored', 'forge_vigil/store.py',
+           (('                (resolved_at, reservation_id),\n'
+             '            )\n'
+             '            if cursor.rowcount != 1:',
+             '                (resolved_at, reservation_id),\n'
+             '            )\n'
+             '            if False:'),),
+           'tests.test_muse.SpendControlTests.test_resolving_a_closed_or_unknown_reservation_is_loud'),
+
+    Mutant('nits symlinked key followed', 'forge_vigil/digests.py',
+           (('    if path.is_symlink():', '    if False:'),),
+           'tests.test_digests.DigestTests.test_a_flagged_link_key_is_refused_without_reading'),
+
+    Mutant('nits journal destination unprotected', 'forge_vigil/__main__.py',
+           (('    protected.append(Path("var/sent.jsonl").resolve())', '    pass  # journal unprotected'),),
+           'tests.test_json_output.JsonOutputTests.test_report_protects_the_default_journal_destination'),
+
+    Mutant('nits server version string frozen stale', 'forge_vigil/http_api.py',
+           (('    server_version = f"ForgeVigil-{CODE_VERSION}"', '    server_version = "ForgeVigil-CP01"'),),
+           'tests.test_checkpoint.RequestBoundaryTests.test_server_header_names_the_current_version'),
+
 )
 
 

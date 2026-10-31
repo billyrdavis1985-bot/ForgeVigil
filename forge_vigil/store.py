@@ -279,14 +279,18 @@ class Store:
 
     def _initialize(self) -> None:
         with self._reader() as conn:
+            try:
+                row = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
+            except sqlite3.Error:
+                row = None
+            version = row[0] if row else None
+        if version not in _MIGRATABLE_VERSIONS:
+            # Before any write, including the journal-mode flip: an unknown store is refused untouched.
+            raise RuntimeError(f"unsupported store schema {version!r}; refusing to migrate implicitly")
+        with self._reader() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
         with self._transaction() as conn:
             conn.execute(_SCHEMA[0])
-            row = conn.execute("SELECT value FROM meta WHERE key = 'store_schema'").fetchone()
-            version = row[0] if row else None
-            if version not in _MIGRATABLE_VERSIONS:
-                # Raised inside the transaction, so nothing is written to an unknown store.
-                raise RuntimeError(f"unsupported store schema {version!r}; refusing to migrate implicitly")
             for statement in _SCHEMA[1:]:
                 conn.execute(statement)
             conn.execute(
@@ -728,19 +732,23 @@ class Store:
         self, reservation_id: str, *, actual_nanousd: int, input_tokens: int, output_tokens: int, resolved_at: str
     ) -> None:
         with self._transaction() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE spend_ledger SET state = 'settled', actual_nanousd = ?, input_tokens = ?, output_tokens = ?, "
                 "resolved_at = ? WHERE reservation_id = ? AND state = 'reserved'",
                 (actual_nanousd, input_tokens, output_tokens, resolved_at, reservation_id),
             )
+            if cursor.rowcount != 1:
+                raise ValueError(f"spend reservation {reservation_id!r} is not open")
 
     def mark_spend_unknown(self, reservation_id: str, *, resolved_at: str) -> None:
         """Usage could not be confirmed: the full reservation stays counted against the cap."""
         with self._transaction() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE spend_ledger SET state = 'unknown', resolved_at = ? WHERE reservation_id = ? AND state = 'reserved'",
                 (resolved_at, reservation_id),
             )
+            if cursor.rowcount != 1:
+                raise ValueError(f"spend reservation {reservation_id!r} is not open")
 
     def recover_spend(self, resolved_at: str) -> int:
         """Reservations left in flight by a previous process become 'unknown' (still counted)."""
