@@ -1,4 +1,25 @@
-# Current CP23 — one-file Defender scan, 0.23.0; Windows validated, original JSON audited
+# Current CP24 — read-only one-file HTML dashboard, 0.24.0
+
+CP24 adds `dashboard --db state.sqlite3 --out page.html`: a read-only export
+of a database as one self-contained HTML file. Counts, dispositions,
+reviews, spend, per-request detail and outbox, with the snapshot embedded
+as data for offline viewing. No server, no executable script, no network,
+no request text, key material, reviewer names, evidence quotes, or
+absolute paths. The database is opened read-only and never upgraded;
+the output is create-only reserved and can never be the database itself.
+Policy, prompts, schemas, receipts, and the store are untouched.
+
+Base main commit: 315ae7efb1a7d57e3421f6069708b1e24e59b3d7 (merged CP23, version 0.23.0).
+Version now 0.24.0.
+
+- New tests: 7; deliberate defects: 8. All prior tests and mutants are
+  retained unchanged. Total inventory: 333 tests / 279 mutants.
+- Linux qualification PASS: 333 tests, 279/279 mutants, both drills,
+  cleanup, zero provider calls.
+- Windows validation pending operator run.
+- Prepared as `dashboard-v1` for operator review; push and merge are the operator's.
+
+# Prior CP23 — one-file Defender scan, 0.23.0; Windows validated, original JSON audited
 
 CP23 adds `scan-file`: one fixed custom MpCmdRun scan of one
 operator-selected local file, with a byte-bound six-outcome report. No

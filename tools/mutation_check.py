@@ -903,6 +903,41 @@ MUTANTS: tuple[Mutant, ...] = (
              '        return 1 if report["outcome"] in DECISIVE_OUTCOMES else 0'),),
            'tests.test_scan.CliTests.test_cli_decisive_is_zero'),
 
+    Mutant('cp24 dashboard counts releases as allowed', 'forge_vigil/dashboard.py',
+           (('released = {k for k, v in reviews.items() if v["delivered"]}', 'released = set()'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard reports decided reviews pending', 'forge_vigil/dashboard.py',
+           (('pending = [r for r in receipts if r["disposition"] in REVIEW_DECISIONS and _key(r) not in reviews]',
+             'pending = [r for r in receipts if r["disposition"] in REVIEW_DECISIONS]'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard unknown spend shown as zero', 'forge_vigil/dashboard.py',
+           (('unknown = [e for e in snapshot.spend_entries if e["state"] == "unknown"]', 'unknown = []'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard drops json blob escaping', 'forge_vigil/dashboard.py',
+           (('    data = (json.dumps(snapshot, sort_keys=True)\n            .replace("&", "\\\\u0026").replace("<", "\\\\u003c").replace(">", "\\\\u003e"))',
+             '    data = json.dumps(snapshot, sort_keys=True)'),),
+           'tests.test_dashboard.DashboardTests.test_render_escapes_hostile_values_and_stays_parseable'),
+
+    Mutant('cp24 dashboard skips html escaping', 'forge_vigil/dashboard.py',
+           (('    return html.escape("" if value is None else str(value), quote=True)',
+             '    return "" if value is None else str(value)'),),
+           'tests.test_dashboard.DashboardTests.test_render_escapes_hostile_values_and_stays_parseable'),
+
+    Mutant('cp24 dashboard opens the database writable', 'forge_vigil/__main__.py',
+           (('snapshot = build_snapshot(Store(db_path, read_only=True))', 'snapshot = build_snapshot(Store(db_path))'),),
+           'tests.test_dashboard.DashboardTests.test_command_writes_the_dashboard_without_changing_the_database'),
+
+    Mutant('cp24 dashboard lists requests in arrival order', 'forge_vigil/dashboard.py',
+           (('    requests.sort(key=lambda r: 0 if (r["disposition"] in REVIEW_DECISIONS and r["review"] is None) else 1)',
+             '    requests.sort(key=lambda r: 1)'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard marks final cases pending', 'forge_vigil/dashboard.py',
+           (('            review_text = "none (final)"', '            review_text = "pending"'),),
+           'tests.test_dashboard.DashboardTests.test_page_states_finality_spend_and_source_honestly'),
     Mutant('nits unknown store version check removed', 'forge_vigil/store.py',
            (('        if version not in _MIGRATABLE_VERSIONS:\n'
              '            # Before any write, including the journal-mode flip: an unknown store is refused untouched.\n'
