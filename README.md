@@ -198,11 +198,6 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   preflight plus all 16 receipts audited (provider billing still pending). These fictional,
   model-assisted judgments do not establish broad phishing or malware accuracy; no labels or
   expectations were changed.
-- **Checkpoint 23 (0.23.0; Windows validated):** adds `scan-file --file path` for one fixed custom
-  Defender scan of one operator-selected file, with a byte-bound six-outcome report. No remediation,
-  elevation, or policy change; exit 0 is never called clean without the engine's own no-threat marker.
-  Adds 34 tests/13 mutants while retaining every prior assertion/mutant. See [SCANNING.md](SCANNING.md).
-  Real-engine smoke on the inert example reported `no_detection_reported` with matching bytes.
 - **Checkpoint 22 (0.22.0; Windows validated):** adds `inspect-email --file message.eml` for offline
   structural triage. It shows actual/displayed link hosts, attachment-name signals and honest
   incomplete/unscanned states. No links are opened, attachment bytes extracted, model called or
@@ -210,6 +205,11 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   See [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md) for commands, limits and privacy. Defender reports
   Normal/active with no scan tested; integration needs its own assignment. The current three-day build
   plan prioritizes email/attachment utility and testing; historical calendar dates do not override it.
+- **Checkpoint 23 (0.23.0; Windows validated):** adds `scan-file --file path` for one fixed custom
+  Defender scan of one operator-selected file, with a byte-bound six-outcome report. No remediation,
+  elevation, or policy change; exit 0 is never called clean without the engine's own no-threat marker.
+  Adds 34 tests/13 mutants while retaining every prior assertion/mutant. See [SCANNING.md](SCANNING.md).
+  Real-engine smoke on the inert example reported `no_detection_reported` with matching bytes.
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
