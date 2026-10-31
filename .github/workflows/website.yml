@@ -1,0 +1,29 @@
+# The Cloudflare Pages release build for forgevigil.com, run in CI first.
+#
+# Runs the exact Pages build command (website/README.md) on the Python version
+# Pages uses, from a clean checkout: the site tests, then a --release build that
+# refuses an unknown commit or uncommitted changes. Stdlib only, no secrets,
+# no deployment. Deploying is Cloudflare Pages' job, from the `website` branch.
+name: website-build
+
+on:
+  push:
+    branches: [main, website]
+  pull_request:
+    branches: [main, website]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pages-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Pages build command
+        run: python3 -B -m unittest tests.test_site && python3 -B website/build.py --release

@@ -16,3 +16,6 @@ sent.jsonl
 # Secrets and local configuration
 .env
 .env.*
+
+# Website build output (website/build.py)
+website/dist/

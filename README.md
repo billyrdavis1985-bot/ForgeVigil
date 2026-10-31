@@ -692,6 +692,7 @@ Missing or unknown approval never produces ALLOW.
 | `tools/registry_drill.py` | disposable configured-registry exercise |
 | `tools/qualification_check.py`, `QUALIFICATION.md` | offline controls, frozen case packs and inspectable results |
 | `DEMO.md`, `JUDGMENTS.md` | demonstration commands, honest evidence labels and human judgment process |
+| `website/` | the forgevigil.com static site, generated with the standard library from the code and recorded results; see [website/README.md](website/README.md) |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the work starts with
 [HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
