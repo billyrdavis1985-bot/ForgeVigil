@@ -134,7 +134,8 @@ class InstanceLockTests(unittest.TestCase):
         first.acquire()
         with self.assertRaises(InstanceLockError) as caught:
             InstanceLock(self.db_path).acquire()
-        self.assertIn(str(self.db_path), str(caught.exception))
+        # The product resolves paths (short names included); compare resolved forms.
+        self.assertIn(str(Path(self.db_path).resolve()), str(caught.exception))
         with InstanceLock(self.tmp / "other.sqlite3"):  # a different database is unaffected
             pass
         first.release()

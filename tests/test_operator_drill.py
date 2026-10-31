@@ -32,7 +32,8 @@ class OperatorDrillTests(unittest.TestCase):
         real_mkdtemp = tempfile.mkdtemp
         def workspace(*args, **kwargs):
             path = real_mkdtemp(*args, dir=self.tmp, **kwargs)
-            self.roots.append(Path(path))
+            # The drill resolves its root; compare resolved forms (short names included).
+            self.roots.append(Path(path).resolve())
             return path
         self.workspace = workspace
 
