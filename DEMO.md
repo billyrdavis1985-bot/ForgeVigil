@@ -90,3 +90,14 @@ Base tree: `64c3b3b9c7831d870c8cc7a8b5808420965fc450`. Code version: `0.18.0`.
    film only demonstrated behavior and actual evaluation status.
 
 Live evaluation, spending, deployment and Git publication remain separately controlled by the operator and repository rules.
+
+## Validated live runbook (red-team, 2026-10-31)
+
+The CP19 storyboard above is planning material. The validated live demo
+is the red-team run in [REDTEAM.md](REDTEAM.md): twelve attacks against
+a local server (prompt injection, restricted/unvetted/unknown targets,
+traversal, replay, oversize, forged approval, missing token, double
+decision, server down), all behaving exactly as predicted with zero
+unexpected deliveries, closing on the `dashboard` export as the
+scoreboard. Run it in T-number order; the finale is `report` plus the
+dashboard page in a browser.
