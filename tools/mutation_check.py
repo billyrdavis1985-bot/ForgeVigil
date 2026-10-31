@@ -846,6 +846,63 @@ MUTANTS: tuple[Mutant, ...] = (
            (('            if parsed_parts > MAX_PARTS:', '            if False:'),),
            'tests.test_email_inspection.EmailInspectionTests.test_mime_object_limit_applies_during_parser_construction'),
 
+    Mutant('cp23 exit zero without marker called clean', 'forge_vigil/scan.py',
+           (('    if exit_code == 0 and _CLEAN_MARKER in lowered:', '    if exit_code == 0:'),),
+           'tests.test_scan.InterpretTests.test_exit_zero_without_marker_is_failed'),
+
+    Mutant('cp23 threat marker ignored', 'forge_vigil/scan.py',
+           (('    if threat_lines:', '    if False:'),),
+           'tests.test_scan.InterpretTests.test_threat_marker_wins'),
+
+    Mutant('cp23 engine failure marker ignored', 'forge_vigil/scan.py',
+           (('    if _FAILURE_MARKER in lowered:', '    if False:'),),
+           'tests.test_scan.InterpretTests.test_failure_marker_is_failed'),
+
+    Mutant('cp23 uninterpretable output called clean', 'forge_vigil/scan.py',
+           (('    if exit_code == 0 and _CLEAN_MARKER in lowered:\n        return NO_DETECTION_REPORTED, evidence\n    return FAILED, evidence',
+             '    if exit_code == 0 and _CLEAN_MARKER in lowered:\n        return NO_DETECTION_REPORTED, evidence\n    return NO_DETECTION_REPORTED, evidence'),),
+           'tests.test_scan.StubEngineTests.test_bare_outputs_are_failed'),
+
+    Mutant('cp23 timeout reported as clean', 'forge_vigil/scan.py',
+           (('return _report(started, target, engine_label, TIMED_OUT_UNKNOWN,',
+             'return _report(started, target, engine_label, NO_DETECTION_REPORTED,'),),
+           'tests.test_scan.StubEngineTests.test_timeout_has_no_retry_and_reports_unknown'),
+
+    Mutant('cp23 remediation flag dropped from fixed tail', 'forge_vigil/scan.py',
+           (('    fixed_tail = [*SCAN_ARGV_TAIL, target, "-DisableRemediation"]',
+             '    fixed_tail = [*SCAN_ARGV_TAIL, target]'),),
+           'tests.test_scan.StubEngineTests.test_argv_is_fixed_with_no_shell'),
+
+    Mutant('cp23 relative scan target accepted', 'forge_vigil/scan.py',
+           (('    if not os.path.isabs(raw):', '    if False:'),),
+           'tests.test_scan.InputTests.test_relative_path_refused'),
+
+    Mutant('cp23 input-change check skipped', 'forge_vigil/scan.py',
+           (('    if after is None or after != before:', '    if False:'),),
+           'tests.test_scan.StubEngineTests.test_tampered_input_is_unscannable'),
+
+    Mutant('cp23 output truncation flag dropped', 'forge_vigil/scan.py',
+           (('    stdout_cut = len(completed.stdout) > MAX_OUTPUT_BYTES', '    stdout_cut = False'),),
+           'tests.test_scan.StubEngineTests.test_output_truncation_flagged'),
+
+    Mutant('cp23 engine spawned through a shell', 'forge_vigil/scan.py',
+           (('            timeout=timeout_s, check=False)', '            timeout=timeout_s, check=False, shell=True'),),
+           'tests.test_scan.StubEngineTests.test_clean'),
+
+    Mutant('cp23 pre-scan byte binding skipped', 'forge_vigil/scan.py',
+           (('        before = _snapshot(target)', '        before = None'),),
+           'tests.test_scan.StubEngineTests.test_report_hides_full_path'),
+
+    Mutant('cp23 failed scan counted decisive', 'forge_vigil/scan.py',
+           (('DECISIVE_OUTCOMES = frozenset({DETECTED, NO_DETECTION_REPORTED})',
+             'DECISIVE_OUTCOMES = frozenset({DETECTED, NO_DETECTION_REPORTED, FAILED})'),),
+           'tests.test_scan.CliTests.test_cli_uncertain_is_one'),
+
+    Mutant('cp23 scan exit codes inverted', 'forge_vigil/__main__.py',
+           (('        return 0 if report["outcome"] in DECISIVE_OUTCOMES else 1',
+             '        return 1 if report["outcome"] in DECISIVE_OUTCOMES else 0'),),
+           'tests.test_scan.CliTests.test_cli_decisive_is_zero'),
+
 )
 
 

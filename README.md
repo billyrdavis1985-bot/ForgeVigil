@@ -198,6 +198,10 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   preflight plus all 16 receipts audited (provider billing still pending). These fictional,
   model-assisted judgments do not establish broad phishing or malware accuracy; no labels or
   expectations were changed.
+- **Checkpoint 23 (0.23.0; in progress):** adds `scan-file --file path` for one fixed custom
+  Defender scan of one operator-selected file, with a byte-bound six-outcome report. No remediation,
+  elevation, or policy change; exit 0 is never called clean without the engine's own no-threat marker.
+  See [SCANNING.md](SCANNING.md). Windows validation pending.
 - **Checkpoint 22 (0.22.0; Windows validated):** adds `inspect-email --file message.eml` for offline
   structural triage. It shows actual/displayed link hosts, attachment-name signals and honest
   incomplete/unscanned states. No links are opened, attachment bytes extracted, model called or

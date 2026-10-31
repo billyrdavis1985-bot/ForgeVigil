@@ -1,4 +1,25 @@
-# Current CP22 — saved-email structural inspection, 0.22.0; Windows validated, original JSON audited
+# Current CP23 — one-file Defender scan, 0.23.0; implementation in progress
+
+CP23 adds `scan-file`: one fixed custom MpCmdRun scan of one
+operator-selected local file, with a byte-bound six-outcome report. No
+remediation, elevation, signature update, policy change, retry, mailbox
+access, extraction, or graphical interface. The operator's PC probe
+established the mapping on the installed engine: absolute path required
+(relative targets fail in the engine), clean scan prints `found no threats`
+with exit 0. Threat-text matching is mapped from vendor documentation and
+installed help text; unknown wording fails closed. Policy, prompts,
+schemas, receipts, and the store are untouched.
+
+Base main commit: 261ab5abe025ec2eff572fee9fc444f518f86479 (merged CP22, version 0.22.0).
+Base tree: 047250c701c9b5c8e769feb58c8b79e2f1a938a5. Version now 0.23.0.
+
+- New tests: 34 (stub-engine harness; real-engine behavior proven only by
+  operator PC evidence); deliberate defects: 13. All prior tests and mutants
+  are retained unchanged.
+- Windows validation and EICAR detection-branch calibration remain operator
+  steps; no commit/push/PR/merge is authorized by this section.
+
+# Prior CP22 — saved-email structural inspection, 0.22.0; Windows validated, original JSON audited
 
 Billy asked to continue useful offline work while away from his Windows PC.
 The current engineering window is three days, prioritizing phishing, malware and
