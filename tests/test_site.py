@@ -84,7 +84,7 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_every_page_and_support_file_is_built(self):
         for name in PAGE_FILES + ["sitemap.xml", "robots.txt", "_headers", "favicon.svg", "og.png",
-                                  ".well-known/security.txt", "fonts/OFL.txt"]:
+                                  "hero-shield.png", ".well-known/security.txt", "fonts/OFL.txt"]:
             self.assertTrue((self.out / name).is_file(), name)
         sitemap = (self.out / "sitemap.xml").read_text(encoding="utf-8")
         self.assertEqual(sitemap.count("<loc>"), len(PAGE_FILES) - 1)  # 404 is not listed
@@ -129,6 +129,12 @@ class SiteBuildTests(unittest.TestCase):
         for font in ("ibm-plex-sans-latin-400-normal.woff2", "ibm-plex-mono-latin-500-normal.woff2"):
             self.assertIn(f"/fonts/{font}", css)
             self.assertTrue((self.out / "fonts" / font).is_file(), font)
+
+    def test_homepage_hero_image_has_descriptive_alt_text(self):
+        images = [attrs for tag, attrs in parse(self.out / "index.html").tags
+                  if tag == "img" and attrs.get("src") == "/hero-shield.png"]
+        self.assertEqual(len(images), 1, "homepage must show the hero image once")
+        self.assertTrue(images[0].get("alt", "").strip(), "hero image needs alt text")
 
     def test_walkthrough_never_hides_the_known_gap(self):
         cases = {c["id"]: c for c in site.walkthrough_cases()}

@@ -242,6 +242,9 @@ receipt.</p>
 <span class="pill">Python standard library</span><span class="pill">MIT license</span></div>
 </div><div>{pipeline()}</div></div></section>
 
+<figure class="hero-figure wrap"><img src="/hero-shield.png" width="1672" height="941"
+alt="The ForgeVigil shield: a metal shield with circuit traces guarding document requests"></figure>
+
 <section class="section"><div class="wrap">
 <div class="section-head"><p class="eyebrow">The problem</p>
 <h2>Manipulation now writes fluently, and small teams have no security desk</h2>
