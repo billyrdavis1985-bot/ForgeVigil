@@ -46,6 +46,9 @@ def main(argv: list[str] | None = None) -> int:
     report = commands.add_parser("report", help="summary of a database: outcomes, reviews, failures, spend")
     report.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
     report.add_argument("--json", type=Path, help="also write the report as JSON to a new file (never overwrites)")
+    dashboard = commands.add_parser("dashboard", help="write a read-only one-file HTML dashboard of a database (no server)")
+    dashboard.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
+    dashboard.add_argument("--out", type=Path, required=True, help="write the dashboard HTML to a new file (never overwrites)")
     review = commands.add_parser("review", help="operator decisions on REVIEW and BLOCK cases (local only)")
     actions = review.add_subparsers(dest="action", required=True)
     common = argparse.ArgumentParser(add_help=False)
@@ -134,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
         return _review(args)
     if args.command == "report":
         return _report(args.db, args.json)
+    if args.command == "dashboard":
+        return _dashboard(args.db, args.out)
     if args.command == "backup":
         return _backup(args)
     if args.command == "registry":
@@ -322,6 +327,40 @@ def _report(db_path: Path, json_path: Path | None) -> int:
         return 1
     if json_path is not None:
         print(f"\nreport written to {json_path}")
+    return 0
+
+
+def _dashboard(db_path: Path, out_path: Path) -> int:
+    import sqlite3
+
+    from .dashboard import build_snapshot, render_html, write_html
+    from .json_output import new_output
+    from .store import Store
+
+    if not db_path.is_file():
+        print(f"refusing to run: no database at {db_path}", file=sys.stderr)
+        return 2
+    problem = _unwritable_output(out_path)
+    if problem:
+        print(f"refusing to run: {problem}", file=sys.stderr)
+        return 2
+    canonical_db = db_path.resolve()
+    protected = [Path(str(canonical_db) + suffix) for suffix in ("", ".key", ".lock", "-wal", "-shm", "-journal")]
+    try:
+        with new_output(out_path, protected) as destination:
+            snapshot = build_snapshot(Store(db_path, read_only=True))
+            summary = snapshot["summary"]
+            print(f"requests={summary['requests_total']} "
+                  f"deliveries={summary['deliveries_total']} "
+                  f"reviews_pending={summary['reviews_pending']}")
+            write_html(destination, render_html(snapshot))
+    except (RuntimeError, sqlite3.Error) as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    print(f"\ndashboard written to {out_path}")
     return 0
 
 

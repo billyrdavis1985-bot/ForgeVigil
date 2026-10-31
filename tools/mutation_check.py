@@ -903,6 +903,34 @@ MUTANTS: tuple[Mutant, ...] = (
              '        return 1 if report["outcome"] in DECISIVE_OUTCOMES else 0'),),
            'tests.test_scan.CliTests.test_cli_decisive_is_zero'),
 
+    Mutant('cp24 dashboard counts releases as allowed', 'forge_vigil/dashboard.py',
+           (('released = {k for k, v in reviews.items() if v["delivered"]}', 'released = set()'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard reports decided reviews pending', 'forge_vigil/dashboard.py',
+           (('pending = [r for r in receipts if r["disposition"] in REVIEW_DECISIONS and _key(r) not in reviews]',
+             'pending = [r for r in receipts if r["disposition"] in REVIEW_DECISIONS]'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard open spend counts settled too', 'forge_vigil/dashboard.py',
+           (('open_spend = [e for e in snapshot.spend_entries if e["state"] != "settled"]',
+             'open_spend = list(snapshot.spend_entries)'),),
+           'tests.test_dashboard.DashboardTests.test_snapshot_counts_every_outcome'),
+
+    Mutant('cp24 dashboard drops json blob escaping', 'forge_vigil/dashboard.py',
+           (('    data = (json.dumps(snapshot, sort_keys=True)\n            .replace("&", "\\\\u0026").replace("<", "\\\\u003c").replace(">", "\\\\u003e"))',
+             '    data = json.dumps(snapshot, sort_keys=True)'),),
+           'tests.test_dashboard.DashboardTests.test_render_escapes_hostile_values_and_stays_parseable'),
+
+    Mutant('cp24 dashboard skips html escaping', 'forge_vigil/dashboard.py',
+           (('    return html.escape("" if value is None else str(value), quote=True)',
+             '    return "" if value is None else str(value)'),),
+           'tests.test_dashboard.DashboardTests.test_render_escapes_hostile_values_and_stays_parseable'),
+
+    Mutant('cp24 dashboard opens the database writable', 'forge_vigil/__main__.py',
+           (('snapshot = build_snapshot(Store(db_path, read_only=True))', 'snapshot = build_snapshot(Store(db_path))'),),
+           'tests.test_dashboard.DashboardTests.test_command_writes_the_dashboard_without_changing_the_database'),
+
 )
 
 

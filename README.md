@@ -210,6 +210,11 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   elevation, or policy change; exit 0 is never called clean without the engine's own no-threat marker.
   Adds 34 tests/13 mutants while retaining every prior assertion/mutant. See [SCANNING.md](SCANNING.md).
   Real-engine smoke on the inert example reported `no_detection_reported` with matching bytes.
+- **Checkpoint 24 (0.24.0):** adds `dashboard --out page.html`, a read-only one-file HTML
+  export of a database: counts, dispositions, reviews, spend, per-request detail and outbox,
+  with the data embedded for offline viewing. No server, no JavaScript, no request text, key
+  material, reviewer names, evidence quotes, or absolute paths. Adds 6 tests/6 mutants while
+  retaining every prior assertion/mutant. See [DASHBOARD.md](DASHBOARD.md).
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
