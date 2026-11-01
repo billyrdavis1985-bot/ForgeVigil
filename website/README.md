@@ -18,6 +18,7 @@ Cloudflare Pages but not in `http.server`; add `.html` when previewing.
 | Shown on the site | Source |
 |---|---|
 | Walkthrough decisions | `forge_vigil.policy.decide()` and the shipped fixtures and cases, at build time |
+| Sample dashboard | `website/sample_dashboard.py` output, committed as `website/demo-dashboard.html`; the test rebuilds it and compares, so drift fails loudly |
 | Test and deliberate-defect counts | `tools/handshake.py` counts and `tools/mutation_check.MUTANTS`, at build time |
 | Version, commit and policy version (footer) | `forge_vigil.versions` and git, at build time |
 | Measured results, limits, timeline, wording | `website/content.py`, transcribed from README and HANDOFF.md with checkpoint and version |

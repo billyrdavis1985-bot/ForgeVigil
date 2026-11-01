@@ -84,7 +84,8 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_every_page_and_support_file_is_built(self):
         for name in PAGE_FILES + ["sitemap.xml", "robots.txt", "_headers", "favicon.svg", "og.png",
-                                  "hero-shield.png", ".well-known/security.txt", "fonts/OFL.txt"]:
+                                  "hero-shield.webp", "demo-dashboard.html",
+                                  ".well-known/security.txt", "fonts/OFL.txt"]:
             self.assertTrue((self.out / name).is_file(), name)
         sitemap = (self.out / "sitemap.xml").read_text(encoding="utf-8")
         self.assertEqual(sitemap.count("<loc>"), len(PAGE_FILES) - 1)  # 404 is not listed
@@ -132,9 +133,23 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_homepage_hero_image_has_descriptive_alt_text(self):
         images = [attrs for tag, attrs in parse(self.out / "index.html").tags
-                  if tag == "img" and attrs.get("src") == "/hero-shield.png"]
+                  if tag == "img" and attrs.get("src") == "/hero-shield.webp"]
         self.assertEqual(len(images), 1, "homepage must show the hero image once")
         self.assertTrue(images[0].get("alt", "").strip(), "hero image needs alt text")
+
+    def test_sample_dashboard_matches_live_code(self):
+        from website.sample_dashboard import build_sample
+
+        def normalize(page: str) -> str:
+            page = re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z", "<time>", page)
+            page = re.sub(r"[0-9a-f]{64}", "<sha256>", page)
+            return re.sub(r"sha256 <code>[0-9a-f]{12}…</code> \(\d+ bytes",
+                          "sha256 <code><sha12>…</code> (<n> bytes", page)
+
+        fresh = normalize(build_sample())
+        committed = normalize((site.ROOT / "website" / "demo-dashboard.html").read_text(encoding="utf-8"))
+        self.assertEqual(fresh, committed,
+                         "regenerate website/demo-dashboard.html with website/sample_dashboard.py")
 
     def test_walkthrough_never_hides_the_known_gap(self):
         cases = {c["id"]: c for c in site.walkthrough_cases()}

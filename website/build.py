@@ -242,7 +242,7 @@ receipt.</p>
 <span class="pill">Python standard library</span><span class="pill">MIT license</span></div>
 </div><div>{pipeline()}</div></div></section>
 
-<figure class="hero-figure wrap"><img src="/hero-shield.png" width="1672" height="941"
+<figure class="hero-figure wrap"><img src="/hero-shield.webp" width="1672" height="941"
 alt="The ForgeVigil shield: a metal shield with circuit traces guarding document requests"></figure>
 
 <section class="section"><div class="wrap">
@@ -743,6 +743,9 @@ def build(out: Path = DEFAULT_OUT, *, release: bool = False, git_executable: str
             target = out / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(item, target)
+    # The sample dashboard is generated from live code by
+    # website/sample_dashboard.py and committed; the build ships it verbatim.
+    shutil.copyfile(Path(__file__).resolve().parent / "demo-dashboard.html", out / "demo-dashboard.html")
 
     for filename, path, builder, scripts, _ in PAGES:
         title, description, body = builder(facts)
