@@ -1,4 +1,6 @@
 # ForgeVigil
+<img width="1280" height="720" alt="forgevigil-hero-optimized" src="https://github.com/user-attachments/assets/02ddec61-1c54-43a3-99ef-4f110a30ec12" />
+
 
 ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
 deterministic code decides, delivery stays in a local outbox, and every result leaves a durable receipt.
