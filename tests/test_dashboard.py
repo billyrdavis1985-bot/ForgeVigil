@@ -123,6 +123,16 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('class="disposition d-REVIEW"', page)
         self.assertIn("python -m forge_vigil dashboard --db var/forgevigil.sqlite3 --out dashboard.html", page)
 
+    def test_page_sets_a_strict_content_security_policy(self):
+        self.populate()
+        page = render_html(build_snapshot(Store(self.db_path, read_only=True)))
+        self.assertIn("<meta http-equiv=\"Content-Security-Policy\" "
+                      "content=\"default-src 'none'; style-src 'unsafe-inline'\">", page)
+        # The page's only script tag is a JSON data block, which CSP never executes.
+        self.assertIn('<script type="application/json" id="forgevigil-data">', page)
+        self.assertNotIn("<script>", page)
+        self.assertNotIn("<script src", page)
+
     def test_snapshot_and_page_carry_no_private_material(self):
         self.populate()
         snapshot = build_snapshot(Store(self.db_path, read_only=True))

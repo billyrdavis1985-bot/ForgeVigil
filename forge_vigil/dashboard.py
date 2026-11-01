@@ -264,6 +264,7 @@ def render_html(snapshot: dict) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
 <title>ForgeVigil dashboard</title>
 <style>{_CSS}</style>
 </head>
