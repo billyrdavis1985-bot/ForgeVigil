@@ -428,7 +428,8 @@ MUTANTS: tuple[Mutant, ...] = (
              '            pass'),),
            'tests.test_paths.PathSafetyTests.test_failed_private_backup_write_removes_only_the_file_it_created'),
     Mutant('export accepts a symbolic link as its case set', 'forge_vigil/review_cases.py',
-           (('\n    if cases_path.is_symlink():\n', '\n    if False:\n'),),
+           (('\n    if cases_path.is_symlink():\n', '\n    if False:\n'),
+            ('\n    if Path(cases_path).is_symlink():\n', '\n    if False:\n'),),
            'tests.test_paths.PathSafetyTests.test_export_refuses_a_symbolic_link_as_its_case_set', posix_only=True),
     Mutant('export ignores a destination changed to a symlink during its write', 'forge_vigil/review_cases.py',
            (('\n        if cases_path.is_symlink():\n', '\n        if False:\n'),),
@@ -974,6 +975,31 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant('nits server version string frozen stale', 'forge_vigil/http_api.py',
            (('    server_version = f"ForgeVigil-{CODE_VERSION}"', '    server_version = "ForgeVigil-CP01"'),),
            'tests.test_checkpoint.RequestBoundaryTests.test_server_header_names_the_current_version'),
+
+    Mutant('redteam listening port shared again', 'forge_vigil/http_api.py',
+           (('    allow_reuse_address = False', '    allow_reuse_address = True'),),
+           'tests.test_checkpoint.RequestBoundaryTests.test_listening_port_cannot_be_shared'),
+
+    Mutant('redteam foreign database opened for writing', 'forge_vigil/store.py',
+           (('        if version is None and tables:', '        if False:'),
+            ('        if tables - _KNOWN_TABLES:', '        if False:'),),
+           'tests.test_instance.InstanceLockTests.test_opening_a_foreign_database_is_refused_without_writing'),
+
+    Mutant('redteam dashboard outbox read outside the snapshot', 'forge_vigil/dashboard.py',
+           (('            for item in snapshot.outbox_summaries', '            for item in store.outbox_items()'),),
+           'tests.test_dashboard.DashboardTests.test_outbox_comes_from_the_same_snapshot_as_the_receipts'),
+
+    Mutant('redteam export lock never attempted', 'forge_vigil/review_cases.py',
+           (('_EXPORT_LOCK_ATTEMPTS = 100', '_EXPORT_LOCK_ATTEMPTS = 0'),),
+           'tests.test_review_cases.ReviewCaseTests.test_export_serializes_on_the_cases_file_lock'),
+
+    Mutant('redteam show omits the custom database', 'forge_vigil/review.py',
+           (('        db_flag = f" --db {db_path}" if db_path is not None else ""\n', '        db_flag = ""\n'),),
+           'tests.test_review.ReviewTests.test_show_explains_a_held_case_and_gives_its_commands'),
+
+    Mutant('redteam submit drops its database hint', 'forge_vigil/__main__.py',
+           (('    print(describe(result, request_id, journal, args.db))', '    print(describe(result, request_id, journal))'),),
+           'tests.test_client.RealTrafficTests.test_submit_suggestion_carries_a_custom_database'),
 
 )
 

@@ -94,10 +94,11 @@ Live evaluation, spending, deployment and Git publication remain separately cont
 ## Validated live runbook (red-team, 2026-10-31)
 
 The CP19 storyboard above is planning material. The validated live demo
-is the red-team run in [REDTEAM.md](REDTEAM.md): twelve attacks against
-a local server (prompt injection, restricted/unvetted/unknown targets,
-traversal, replay, oversize, forged approval, missing token, double
-decision, server down), all behaving exactly as predicted with zero
-unexpected deliveries, closing on the `dashboard` export as the
-scoreboard. Run it in T-number order; the finale is `report` plus the
-dashboard page in a browser.
+is the red-team run in [REDTEAM.md](REDTEAM.md): 15 rows against a local
+server — T0 health check, T1 through T11 attacks and checks, T12 server
+stopped — every row behaving exactly as predicted, zero unexpected
+deliveries with T1 as the expected fixture gap case (the fixture
+assessor never flags, so T1's ALLOW was bound to happen; detection was
+not tested), closing on the `dashboard` export as the scoreboard. Run it
+in T-number order; the finale is `report` plus the dashboard page in a
+browser.

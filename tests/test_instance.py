@@ -220,6 +220,37 @@ class InstanceLockTests(unittest.TestCase):
         secure_state_files(loose)  # an existing database is tightened too
         self.assertEqual(stat.S_IMODE(loose.stat().st_mode), 0o600)
 
+    def test_opening_a_foreign_database_is_refused_without_writing(self):
+        foreign = self.tmp / "invoices.sqlite3"
+        conn = sqlite3.connect(foreign)
+        try:
+            conn.execute("CREATE TABLE invoices (id INTEGER PRIMARY KEY, amount_cents INTEGER)")
+            conn.execute("INSERT INTO invoices VALUES (1, 5000)")
+            conn.commit()
+        finally:
+            conn.close()
+        with self.assertRaises(RuntimeError):
+            Store(foreign)
+        conn = sqlite3.connect(foreign)
+        try:
+            tables = sorted(row[0] for row in
+                            conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'"))
+            rows = conn.execute("SELECT * FROM invoices").fetchall()
+        finally:
+            conn.close()
+        self.assertEqual(tables, ["invoices"])
+        self.assertEqual(rows, [(1, 5000)])
+
+        Store(self.db_path)  # a genuine store still opens, until a stranger table lands in it
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("CREATE TABLE stowaway (id INTEGER PRIMARY KEY)")
+            conn.commit()
+        finally:
+            conn.close()
+        with self.assertRaises(RuntimeError):
+            Store(self.db_path)
+
 
 if __name__ == "__main__":
     unittest.main()

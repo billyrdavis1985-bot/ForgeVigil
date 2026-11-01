@@ -150,6 +150,12 @@ _SCHEMA += (
 )
 # Upgrades only add tables; old receipt/review JSON and input digests are retained.
 _MIGRATABLE_VERSIONS = (None, "1", "2", "3", STORE_SCHEMA_VERSION)
+# Every table a ForgeVigil store may hold. Anything else means the file is not
+# (only) a ForgeVigil store, and opening it must not write into it.
+_KNOWN_TABLES = frozenset({
+    "meta", "requests", "receipts", "outbox", "spend_ledger", "reviews",
+    "registry_snapshots", "registry_activations", "request_authority",
+})
 # Which operator decisions each held disposition accepts. Only REVIEW can ever be released.
 REVIEW_DECISIONS = {"REVIEW": ("release", "reject"), "BLOCK": ("confirm", "false_positive")}
 
@@ -210,6 +216,7 @@ class Snapshot:
     delivery_keys: list[tuple[str, str]]  # (actor_id, request_id) per outbox item
     spend_entries: list[dict]
     committed_spend_nanousd: int
+    outbox_summaries: list[dict]  # per-item ids, byte length and sha; bodies are never returned
 
 
 _OUTBOX_COLUMNS = (
@@ -287,6 +294,15 @@ class Store:
         if version not in _MIGRATABLE_VERSIONS:
             # Before any write, including the journal-mode flip: an unknown store is refused untouched.
             raise RuntimeError(f"unsupported store schema {version!r}; refusing to migrate implicitly")
+        with self._reader() as conn:
+            tables = {row[0] for row in
+                      conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
+                                   "AND name NOT LIKE 'sqlite_%' ESCAPE '\\'")}
+        if version is None and tables:
+            raise RuntimeError("not a ForgeVigil database: it holds tables but no store metadata; "
+                               "refusing to write into it")
+        if tables - _KNOWN_TABLES:
+            raise RuntimeError("database holds tables outside the ForgeVigil store; refusing to write into it")
         with self._reader() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
         with self._transaction() as conn:
@@ -647,13 +663,15 @@ class Store:
 
     def snapshot(self) -> Snapshot:
         """Everything the operator report needs, read in ONE transaction so the parts agree
-        even while serve keeps writing. Outbox bodies are not read."""
+        even while serve keeps writing. Outbox bodies are not returned, only their lengths and hashes."""
         with self._reader() as conn:
             conn.execute("BEGIN")
             try:
                 receipts = conn.execute("SELECT receipt_json FROM receipts ORDER BY created_at, receipt_id").fetchall()
                 reviews = conn.execute("SELECT review_json FROM reviews ORDER BY created_at, review_id").fetchall()
                 deliveries = conn.execute("SELECT actor_id, request_id FROM outbox ORDER BY created_at").fetchall()
+                outbox = conn.execute("SELECT actor_id, request_id, document_id, recipient_id, "
+                                      "length(body), body_sha256 FROM outbox ORDER BY created_at").fetchall()
                 cursor = conn.cursor()
                 cursor.row_factory = sqlite3.Row
                 spend = cursor.execute("SELECT * FROM spend_ledger ORDER BY created_at, reservation_id").fetchall()
@@ -666,6 +684,8 @@ class Store:
             delivery_keys=[(row[0], row[1]) for row in deliveries],
             spend_entries=[dict(row) for row in spend],
             committed_spend_nanousd=committed,
+            outbox_summaries=[{"actor_id": row[0], "request_id": row[1], "document_id": row[2],
+                               "recipient_id": row[3], "bytes": row[4], "sha256": row[5]} for row in outbox],
         )
 
     def review_queue(self) -> list[tuple[dict, dict | None]]:

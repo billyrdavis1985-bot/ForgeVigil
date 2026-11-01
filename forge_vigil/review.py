@@ -183,7 +183,8 @@ def approval_status(fixtures: FixtureSet, approval_ref: str | None) -> str:
     return approval.status if approval else "unverified"
 
 
-def describe_case(receipt: dict, review: dict | None, *, current_approval_status: str | None = None) -> str:
+def describe_case(receipt: dict, review: dict | None, *, current_approval_status: str | None = None,
+                  db_path=None) -> str:
     """Everything an operator needs to decide one case, from its receipt and any decision.
 
     Receipts hold digests, never request text, so none can appear here. Every field is read
@@ -264,7 +265,8 @@ def describe_case(receipt: dict, review: dict | None, *, current_approval_status
         flagged = assessment.get("threat_finding") == "threat"
         if "release" in allowed and flagged:
             lines.append("  note: the model flagged a threat, so a release needs --despite-threat")
+        db_flag = f" --db {db_path}" if db_path is not None else ""
         for decision in allowed:
             override = " --despite-threat" if decision == "release" and flagged else ""
-            lines.append(f"  python -m forge_vigil review {decision.replace('_', '-')} {request_id} --reviewer <you>{override}")
+            lines.append(f"  python -m forge_vigil review {decision.replace('_', '-')} {request_id} --reviewer <you>{override}{db_flag}")
     return "\n".join(lines)

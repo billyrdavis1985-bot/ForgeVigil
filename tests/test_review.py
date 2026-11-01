@@ -253,8 +253,8 @@ class ReviewTests(unittest.TestCase):
             "  finding: threat (APPROVAL_MANIPULATION), status completed",
             "  evidence: fixture (other), claim other -> verified",
             "Decision:  pending; allowed: release or reject",
-            "  python -m forge_vigil review release req-flagged --reviewer <you> --despite-threat",
-            "  python -m forge_vigil review reject req-flagged --reviewer <you>",
+            f"  python -m forge_vigil review release req-flagged --reviewer <you> --despite-threat --db {self.db_path}",
+            f"  python -m forge_vigil review reject req-flagged --reviewer <you> --db {self.db_path}",
         ):
             self.assertIn(line, shown.stdout.splitlines())
         self.assertNotIn("fixture:injected-threat", shown.stdout)

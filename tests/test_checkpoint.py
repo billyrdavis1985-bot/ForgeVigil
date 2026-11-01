@@ -97,6 +97,18 @@ class RequestBoundaryTests(_TempStateTest):
         self.assertIn("refusing to start", proc.stderr)
         self.assertFalse(db.parent.exists())
 
+    def test_listening_port_cannot_be_shared(self):
+        # REDTEAM F1: with reuse on, Windows let a stale dev server keep a port
+        # while ForgeVigil also "listened" on it, and traffic went to the stranger.
+        self.assertIs(ForgeVigilHTTPServer.allow_reuse_address, False)
+        service = ForgeVigilService(Store(self.db_path), fixed_clean_assessor())
+        first = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=0, quiet=True)
+        self.addCleanup(first.server_close)
+        port = first.server_address[1]
+        with self.assertRaises(OSError):
+            second = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=port, quiet=True)
+            self.addCleanup(second.server_close)
+
     def test_authentication_precedes_parsing_size_limits_and_work(self):  # [check 14]
         assessor = CountingAssessor()
         harness = self.harness(assessor=assessor)

@@ -16,16 +16,20 @@ import codecs
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 
 from .evaluation import MAX_CASE_ID_CHARS, load_case_set
 from .digests import DigestKeyError, digest_matches, is_keyed, key_path_for, load_key
+from .instance import InstanceLock, InstanceLockError
 from .schema import RequestValidationError, parse_request
 from .store import Store
 from .versions import CODE_VERSION
 
 DEFAULT_CASES_PATH = Path("var/review_cases.json")
 CASE_SET_VERSION = "local.reviews.v1"
+_EXPORT_LOCK_ATTEMPTS = 100
+_EXPORT_LOCK_RETRY_S = 0.005
 _LABEL_FROM_DECISION = {"false_positive": "benign", "release": "benign", "confirm": "attack"}
 _ATTACK_EXPECT = ["BLOCK", "REVIEW"]
 
@@ -62,6 +66,47 @@ def _case_id(request_id: str) -> str:
         return request_id
     suffix = hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:8]
     return f"{request_id[:MAX_CASE_ID_CHARS - 9]}-{suffix}"
+
+
+def _append_case(cases_path: Path, case: dict) -> dict:
+    """Read, append and atomically replace. Callers must hold the cases lock."""
+    cases_path = Path(cases_path)
+    if cases_path.is_symlink():
+        raise ExportError("invalid_cases_file", "the case-set destination must not be a symbolic link")
+    if cases_path.exists():
+        try:
+            load_case_set(cases_path)
+            data = json.loads(cases_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ExportError("invalid_cases_file", f"{cases_path} is not a readable case set: {exc}") from None
+    else:
+        data = {
+            "version": CASE_SET_VERSION,
+            "about": "Cases exported from operator decisions. Contains request text: keep it local.",
+            "cases": [],
+        }
+    if any(entry["id"] == case["id"] for entry in data["cases"]):
+        raise ExportError("already_exported", f"{cases_path} already has case {case['id']!r}")
+    data["cases"].append(case)
+
+    # Write a sibling file and swap it in, so an interruption never leaves a half-written case set.
+    cases_path.parent.mkdir(parents=True, exist_ok=True)
+    partial = cases_path.with_name(cases_path.name + ".partial")
+    try:
+        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    except FileExistsError:
+        raise ExportError("export_busy", f"{partial} already exists; it was not changed") from None
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if cases_path.is_symlink():
+            raise ExportError("invalid_cases_file", "the case-set destination became a symbolic link")
+        os.replace(partial, cases_path)
+    finally:
+        partial.unlink(missing_ok=True)  # exclusive creation succeeded: only our temporary file is removed
+    return case
 
 
 def export_case(
@@ -148,43 +193,19 @@ def export_case(
         case["source"]["registry"] = {"snapshot": authority["snapshot"], "generation": authority["generation"],
                                        "delivery_context": receipt.get("delivery_context")}
 
-    cases_path = Path(cases_path)
-    if cases_path.is_symlink():
+    # Fail fast with no side effects; the same check runs again under the lock.
+    if Path(cases_path).is_symlink():
         raise ExportError("invalid_cases_file", "the case-set destination must not be a symbolic link")
-    if cases_path.exists():
+    # Serialize whole read-modify-write cycles: without the lock, two callers
+    # can read the same base and the second replace silently drops the first
+    # case. A stale .partial from a crashed process still ends in export_busy.
+    for _attempt in range(_EXPORT_LOCK_ATTEMPTS):
         try:
-            load_case_set(cases_path)
-            data = json.loads(cases_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise ExportError("invalid_cases_file", f"{cases_path} is not a readable case set: {exc}") from None
-    else:
-        data = {
-            "version": CASE_SET_VERSION,
-            "about": "Cases exported from operator decisions. Contains request text: keep it local.",
-            "cases": [],
-        }
-    if any(entry["id"] == case["id"] for entry in data["cases"]):
-        raise ExportError("already_exported", f"{cases_path} already has case {case['id']!r}")
-    data["cases"].append(case)
-
-    # Write a sibling file and swap it in, so an interruption never leaves a half-written case set.
-    cases_path.parent.mkdir(parents=True, exist_ok=True)
-    partial = cases_path.with_name(cases_path.name + ".partial")
-    try:
-        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
-    except FileExistsError:
-        raise ExportError("export_busy", f"{partial} already exists; it was not changed") from None
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        if cases_path.is_symlink():
-            raise ExportError("invalid_cases_file", "the case-set destination became a symbolic link")
-        os.replace(partial, cases_path)
-    finally:
-        partial.unlink(missing_ok=True)  # exclusive creation succeeded: only our temporary file is removed
-    return case
+            with InstanceLock(cases_path):
+                return _append_case(cases_path, case)
+        except InstanceLockError:
+            time.sleep(_EXPORT_LOCK_RETRY_S)
+    raise ExportError("export_busy", f"another export to {cases_path} did not finish in time")
 
 
 # How `export_all` reports each journaled request; codes from export_case map onto these groups.

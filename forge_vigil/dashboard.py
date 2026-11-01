@@ -50,20 +50,27 @@ def _key(receipt: dict) -> tuple[str, str]:
     return receipt["actor_id"], receipt["request_id"]
 
 
-def _file_fingerprint(path) -> tuple[int, str]:
+def _source_fingerprint(db_path) -> tuple[int, str]:
+    """Hash the database file plus its -wal and -journal sidecars, if present.
+    -shm is deliberately excluded: it holds reader-coordination state that
+    changes on every read, so including it would cry wolf on each export."""
     digest = hashlib.sha256()
     size = 0
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-            size += len(chunk)
+    for suffix in ("", "-wal", "-journal"):
+        try:
+            with open(str(db_path) + suffix, "rb") as handle:
+                for chunk in iter(lambda: handle.read(65536), b""):
+                    digest.update(chunk)
+                    size += len(chunk)
+        except FileNotFoundError:
+            continue
     return size, digest.hexdigest()
 
 
 def build_snapshot(store: Store) -> dict:
     """Privacy-scrubbed dashboard data. Never includes request text, key
     material, reviewer names, evidence quotes, or absolute paths."""
-    size_before, sha_before = _file_fingerprint(store.path)
+    size_before, sha_before = _source_fingerprint(store.path)
     snapshot = store.snapshot()
     receipts = sorted(snapshot.receipts, key=lambda r: (r["received_at"], r["request_id"]))
     reviews = {(v["actor_id"], v["request_id"]): v for v in snapshot.reviews}
@@ -118,7 +125,7 @@ def build_snapshot(store: Store) -> dict:
     settled_nano = sum(e["actual_nanousd"] for e in settled)
     unknown_nano = sum(e["reserved_nanousd"] for e in unknown)
     in_flight_nano = sum(e["reserved_nanousd"] for e in in_flight)
-    size_after, sha_after = _file_fingerprint(store.path)
+    size_after, sha_after = _source_fingerprint(store.path)
     return {
         "dashboard": {"schema": DASHBOARD_SCHEMA_VERSION, "code_version": CODE_VERSION},
         "period": {
@@ -149,11 +156,13 @@ def build_snapshot(store: Store) -> dict:
         },
         "requests": requests,
         "outbox": [
-            {"request_id": item.request_id, "actor_id": item.actor_id,
-             "document_id": item.document_id, "recipient_id": item.recipient_id,
-             "released": (item.actor_id, item.request_id) in released,
-             "bytes": len(item.body), "sha256": item.body_sha256}
-            for item in store.outbox_items()
+            {"request_id": item["request_id"], "actor_id": item["actor_id"],
+             "document_id": item["document_id"], "recipient_id": item["recipient_id"],
+             "released": (item["actor_id"], item["request_id"]) in released,
+             "bytes": item["bytes"], "sha256": item["sha256"]}
+            # From the same snapshot transaction as the receipts: a separate
+            # outbox read here could show deliveries the receipts predate.
+            for item in snapshot.outbox_summaries
         ],
     }
 

@@ -182,8 +182,10 @@ LIVE_RUNS = [
             ("Recorded spend", "$0.00"),
         ],
         "note": "Qualified on Linux and in CI (Python 3.11 and 3.13). Windows validation the same day: 339 tests "
-                "with 17 platform skips, 260 of 260 runnable defects caught, both drills passed. A 12-attack live "
-                "red-team run against this build behaved exactly as predicted with zero unexpected deliveries.",
+                "with 17 platform skips, 260 of 260 runnable defects caught, both drills passed. A 15-row live "
+                "red-team run against this build (T0 health check, T1 through T11, T12 server stopped) behaved "
+                "exactly as predicted with zero unexpected deliveries, with T1 as the expected fixture gap case: "
+                "the fixture assessor never flags, so its ALLOW was bound to happen and detection was not tested.",
     },
 ]
 
