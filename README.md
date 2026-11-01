@@ -1,5 +1,5 @@
 # ForgeVigil
-<img width="1280" height="720" alt="forgevigil-hero-optimized" src="https://github.com/user-attachments/assets/02ddec61-1c54-43a3-99ef-4f110a30ec12" />
+<img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with circuit lines and document icons, with an orange V" width="1280" />
 
 
 ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
