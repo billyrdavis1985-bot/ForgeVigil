@@ -743,6 +743,9 @@ def build(out: Path = DEFAULT_OUT, *, release: bool = False, git_executable: str
             target = out / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(item, target)
+    # The sample dashboard is generated from live code by
+    # website/sample_dashboard.py and committed; the build ships it verbatim.
+    shutil.copyfile(Path(__file__).resolve().parent / "demo-dashboard.html", out / "demo-dashboard.html")
 
     for filename, path, builder, scripts, _ in PAGES:
         title, description, body = builder(facts)

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForgeVigil dashboard</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;margin:2rem auto;max-width:72rem;
+padding:0 1rem;color:#1a1a1a;background:#fff;line-height:1.45}
+h1{font-size:1.5rem;margin:0 0 .25rem}
+h2{font-size:1.15rem;margin:2rem 0 .5rem;border-bottom:1px solid #ddd;padding-bottom:.25rem}
+p.sub{color:#444;margin:.25rem 0 1.5rem}
+table{border-collapse:collapse;width:100%;margin:.5rem 0}
+th,td{text-align:left;padding:.35rem .6rem;border-bottom:1px solid #e5e5e5;font-size:.92rem}
+th{font-weight:600;background:#f4f4f4}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em}
+.disposition{font-weight:600}
+.d-ALLOW{color:#1a7f37}
+.d-BLOCK{color:#b42318}
+.d-DENY{color:#555}
+.d-REVIEW{color:#9a6700}
+p.note{color:#444;font-size:.9rem}
+td .sub{color:#666;font-size:.82em}
+details{margin:.4rem 0;border:1px solid #e5e5e5;padding:.4rem .7rem}
+summary{cursor:pointer;font-weight:600}
+dl{display:grid;grid-template-columns:12rem 1fr;gap:.15rem .8rem;margin:.5rem 0;font-size:.92rem}
+dt{color:#444}
+footer{margin-top:2.5rem;color:#666;font-size:.85rem;border-top:1px solid #ddd;padding-top:.75rem}
+</style>
+</head>
+<body>
+<h1>ForgeVigil dashboard</h1>
+<p class="sub">Read-only export · schema forgevigil.dashboard.v1 · code 0.24.0<br>2026-11-01T18:20:55.771468Z … 2026-11-01T18:20:55.774674Z</p>
+<h2>Summary</h2>
+<table>
+<tr><th>Requests total</th><td class="num">4</td></tr>
+<tr><th>Deliveries (allowed / released / total)</th><td class="num">1 / 1 / 2</td></tr>
+<tr><th>Reviews pending / decided</th><td class="num">1 / 1</td></tr>
+<tr><th>Assessments failed</th><td class="num">0</td></tr>
+<tr><th>Spend settled</th><td class="num">$0.00 <span class="sub">(0 nanoUSD)</span></td></tr>
+<tr><th>Spend unknown usage</th><td class="num">$0.00 <span class="sub">(0 nanoUSD)</span></td></tr>
+<tr><th>Spend in flight</th><td class="num">$0.00 <span class="sub">(0 nanoUSD)</span></td></tr>
+<tr><th>Database unchanged</th><td>yes — sha256 <code>2848f1af2281…</code> (102400 bytes, verified before/after)</td></tr>
+</table>
+<h2>By disposition</h2>
+<table><tr><th>Disposition</th><th class="num">Count</th></tr><tr><td><span class="disposition d-ALLOW">ALLOW</span></td><td class="num">1</td></tr>
+<tr><td><span class="disposition d-BLOCK">BLOCK</span></td><td class="num">0</td></tr>
+<tr><td><span class="disposition d-DENY">DENY</span></td><td class="num">1</td></tr>
+<tr><td><span class="disposition d-REVIEW">REVIEW</span></td><td class="num">2</td></tr></table>
+<h2>Requests</h2>
+<p class="note">Undecided REVIEW/BLOCK first, then everything else by arrival.</p><details><summary><span class="disposition d-REVIEW">REVIEW</span> — <code>sample-waiting</code> · APPROVAL_MISSING</summary><dl><dt>Actor</dt><dd><code>operator</code></dd><dt>Document</dt><dd><code>public-spec</code></dd><dt>Recipient</dt><dd><code>supplier</code></dd><dt>Approval</dt><dd><code>none</code> (missing)</dd><dt>Received</dt><dd class="mono">2026-11-01T18:20:55.774674Z</dd><dt>Completed</dt><dd class="mono">2026-11-01T18:20:55.775392Z</dd><dt>Assessment</dt><dd>completed / none (FIXTURE_FIXED_CLEAN) (evidence: not_applicable)</dd><dt>Usage</dt><dd>zero, $0.00 (0 in / 0 out tokens)</dd><dt>Review</dt><dd>pending</dd></dl></details>
+<details><summary><span class="disposition d-ALLOW">ALLOW</span> — <code>sample-allow</code> · ALL_CHECKS_PASSED</summary><dl><dt>Actor</dt><dd><code>operator</code></dd><dt>Document</dt><dd><code>public-spec</code></dd><dt>Recipient</dt><dd><code>supplier</code></dd><dt>Approval</dt><dd><code>HR-2026-118</code> (verified)</dd><dt>Received</dt><dd class="mono">2026-11-01T18:20:55.771468Z</dd><dt>Completed</dt><dd class="mono">2026-11-01T18:20:55.772199Z</dd><dt>Assessment</dt><dd>completed / none (FIXTURE_FIXED_CLEAN) (evidence: not_applicable)</dd><dt>Usage</dt><dd>zero, $0.00 (0 in / 0 out tokens)</dd><dt>Review</dt><dd>none (final)</dd></dl></details>
+<details><summary><span class="disposition d-REVIEW">REVIEW</span> — <code>sample-held</code> · APPROVAL_MISSING</summary><dl><dt>Actor</dt><dd><code>operator</code></dd><dt>Document</dt><dd><code>public-spec</code></dd><dt>Recipient</dt><dd><code>supplier</code></dd><dt>Approval</dt><dd><code>none</code> (missing)</dd><dt>Received</dt><dd class="mono">2026-11-01T18:20:55.772740Z</dd><dt>Completed</dt><dd class="mono">2026-11-01T18:20:55.773410Z</dd><dt>Assessment</dt><dd>completed / none (FIXTURE_FIXED_CLEAN) (evidence: not_applicable)</dd><dt>Usage</dt><dd>zero, $0.00 (0 in / 0 out tokens)</dd><dt>Review</dt><dd>release + delivered @ 2026-11-01T18:20:55.777796Z</dd></dl></details>
+<details><summary><span class="disposition d-DENY">DENY</span> — <code>sample-deny</code> · DOCUMENT_RESTRICTED</summary><dl><dt>Actor</dt><dd><code>operator</code></dd><dt>Document</dt><dd><code>restricted-cost-sheet</code></dd><dt>Recipient</dt><dd><code>supplier</code></dd><dt>Approval</dt><dd><code>HR-2026-118</code> (not_checked)</dd><dt>Received</dt><dd class="mono">2026-11-01T18:20:55.773839Z</dd><dt>Completed</dt><dd class="mono">2026-11-01T18:20:55.774206Z</dd><dt>Assessment</dt><dd>not called (scope checks decided before any assessment)</dd><dt>Usage</dt><dd>zero, $0.00 (0 in / 0 out tokens)</dd><dt>Review</dt><dd>none (final)</dd></dl></details>
+<h2>Outbox</h2>
+<table><tr><th>Request</th><th>Document</th><th>Recipient</th><th>Via</th><th class="num">Bytes</th><th>SHA-256</th></tr><tr><td><code>sample-allow</code></td><td><code>public-spec</code></td><td><code>supplier</code></td><td>allowed</td><td class="num">201</td><td><code>c77b023bf82204210799c66c59bf4bbd71542cdc6c7e0c5f12a1945d70a934e1</code></td></tr>
+<tr><td><code>sample-held</code></td><td><code>public-spec</code></td><td><code>supplier</code></td><td>released</td><td class="num">201</td><td><code>c77b023bf82204210799c66c59bf4bbd71542cdc6c7e0c5f12a1945d70a934e1</code></td></tr></table>
+<footer>Counts and codes only. No request text, key material, reviewer names, or absolute paths are embedded. Regenerate with<br><code>python -m forge_vigil dashboard --db var/forgevigil.sqlite3 --out dashboard.html</code>.</footer>
+<script type="application/json" id="forgevigil-data">{"dashboard": {"code_version": "0.24.0", "schema": "forgevigil.dashboard.v1"}, "outbox": [{"actor_id": "operator", "bytes": 201, "document_id": "public-spec", "recipient_id": "supplier", "released": false, "request_id": "sample-allow", "sha256": "c77b023bf82204210799c66c59bf4bbd71542cdc6c7e0c5f12a1945d70a934e1"}, {"actor_id": "operator", "bytes": 201, "document_id": "public-spec", "recipient_id": "supplier", "released": true, "request_id": "sample-held", "sha256": "c77b023bf82204210799c66c59bf4bbd71542cdc6c7e0c5f12a1945d70a934e1"}], "period": {"first_received": "2026-11-01T18:20:55.771468Z", "last_received": "2026-11-01T18:20:55.774674Z"}, "requests": [{"actor_id": "operator", "approval_check": "missing", "approval_ref": null, "assessment": {"evidence_support": "not_applicable", "finding": "none", "reason_code": "FIXTURE_FIXED_CLEAN", "status": "completed"}, "completed_at": "2026-11-01T18:20:55.775392Z", "disposition": "REVIEW", "document_id": "public-spec", "reason_code": "APPROVAL_MISSING", "received_at": "2026-11-01T18:20:55.774674Z", "recipient_id": "supplier", "request_id": "sample-waiting", "review": null, "usage": {"cost_usd": "0.00", "input_tokens": 0, "output_tokens": 0, "status": "zero"}}, {"actor_id": "operator", "approval_check": "verified", "approval_ref": "HR-2026-118", "assessment": {"evidence_support": "not_applicable", "finding": "none", "reason_code": "FIXTURE_FIXED_CLEAN", "status": "completed"}, "completed_at": "2026-11-01T18:20:55.772199Z", "disposition": "ALLOW", "document_id": "public-spec", "reason_code": "ALL_CHECKS_PASSED", "received_at": "2026-11-01T18:20:55.771468Z", "recipient_id": "supplier", "request_id": "sample-allow", "review": null, "usage": {"cost_usd": "0.00", "input_tokens": 0, "output_tokens": 0, "status": "zero"}}, {"actor_id": "operator", "approval_check": "missing", "approval_ref": null, "assessment": {"evidence_support": "not_applicable", "finding": "none", "reason_code": "FIXTURE_FIXED_CLEAN", "status": "completed"}, "completed_at": "2026-11-01T18:20:55.773410Z", "disposition": "REVIEW", "document_id": "public-spec", "reason_code": "APPROVAL_MISSING", "received_at": "2026-11-01T18:20:55.772740Z", "recipient_id": "supplier", "request_id": "sample-held", "review": {"decided_at": "2026-11-01T18:20:55.777796Z", "decision": "release", "delivered": true}, "usage": {"cost_usd": "0.00", "input_tokens": 0, "output_tokens": 0, "status": "zero"}}, {"actor_id": "operator", "approval_check": "not_checked", "approval_ref": "HR-2026-118", "assessment": {"evidence_support": null, "finding": "not_assessed", "reason_code": null, "status": "not_run"}, "completed_at": "2026-11-01T18:20:55.774206Z", "disposition": "DENY", "document_id": "restricted-cost-sheet", "reason_code": "DOCUMENT_RESTRICTED", "received_at": "2026-11-01T18:20:55.773839Z", "recipient_id": "supplier", "request_id": "sample-deny", "review": null, "usage": {"cost_usd": "0.00", "input_tokens": 0, "output_tokens": 0, "status": "zero"}}], "source_db": {"byte_size": 102400, "sha256_after": "2848f1af2281b0e354f9f91edf1648b92530147c93127f28bf80154ee62f24bc", "sha256_before": "2848f1af2281b0e354f9f91edf1648b92530147c93127f28bf80154ee62f24bc", "unchanged": true}, "summary": {"assessments_failed": 0, "by_disposition": {"ALLOW": 1, "BLOCK": 0, "DENY": 1, "REVIEW": 2}, "deliveries_allowed": 1, "deliveries_released": 1, "deliveries_total": 2, "requests_total": 4, "reviews_decided": {"release": 1}, "reviews_pending": 1, "spend_inflight_nanousd": 0, "spend_inflight_usd": "0.00", "spend_settled_nanousd": 0, "spend_settled_usd": "0.00", "spend_unknown_nanousd": 0, "spend_unknown_usd": "0.00"}}</script>
+</body>
+</html>

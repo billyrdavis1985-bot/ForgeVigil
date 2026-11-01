@@ -26,6 +26,7 @@ def repo_file(path: str) -> str:
 NAV = [
     ("/how-it-works", "How it works"),
     ("/walkthrough", "Walkthrough"),
+    ("/demo-dashboard", "Dashboard"),
     ("/evidence", "Evidence"),
     ("/limits", "Limits"),
     ("/get-started", "Get started"),
