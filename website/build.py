@@ -242,7 +242,7 @@ receipt.</p>
 <span class="pill">Python standard library</span><span class="pill">MIT license</span></div>
 </div><div>{pipeline()}</div></div></section>
 
-<figure class="hero-figure wrap"><img src="/hero-shield.png" width="1672" height="941"
+<figure class="hero-figure wrap"><img src="/hero-shield.webp" width="1672" height="941"
 alt="The ForgeVigil shield: a metal shield with circuit traces guarding document requests"></figure>
 
 <section class="section"><div class="wrap">

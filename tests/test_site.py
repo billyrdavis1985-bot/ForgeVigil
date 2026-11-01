@@ -84,7 +84,7 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_every_page_and_support_file_is_built(self):
         for name in PAGE_FILES + ["sitemap.xml", "robots.txt", "_headers", "favicon.svg", "og.png",
-                                  "hero-shield.png", "demo-dashboard.html",
+                                  "hero-shield.webp", "demo-dashboard.html",
                                   ".well-known/security.txt", "fonts/OFL.txt"]:
             self.assertTrue((self.out / name).is_file(), name)
         sitemap = (self.out / "sitemap.xml").read_text(encoding="utf-8")
@@ -133,7 +133,7 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_homepage_hero_image_has_descriptive_alt_text(self):
         images = [attrs for tag, attrs in parse(self.out / "index.html").tags
-                  if tag == "img" and attrs.get("src") == "/hero-shield.png"]
+                  if tag == "img" and attrs.get("src") == "/hero-shield.webp"]
         self.assertEqual(len(images), 1, "homepage must show the hero image once")
         self.assertTrue(images[0].get("alt", "").strip(), "hero image needs alt text")
 
