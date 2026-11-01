@@ -127,7 +127,7 @@ def submit(port: int, token: str, payload: dict, journal_path: Path | None, *, s
     return {"status": status, "reply": reply, "recorded": recorded, "journaled": journaled}
 
 
-def describe(result: dict, request_id: str, journal_path: Path | None) -> str:
+def describe(result: dict, request_id: str, journal_path: Path | None, db: Path | None = None) -> str:
     reply = result["reply"]
     if not result["recorded"]:
         error = reply.get("error", "no JSON reply")
@@ -141,7 +141,8 @@ def describe(result: dict, request_id: str, journal_path: Path | None) -> str:
     if review:
         lines.append(f"  operator decision: {review.get('decision', '?').replace('_', '-')}")
     elif disposition in ("REVIEW", "BLOCK"):
-        lines.append(f"  waiting for an operator decision: python -m forge_vigil review show {request_id}")
+        db_flag = f" --db {db}" if db is not None else ""
+        lines.append(f"  waiting for an operator decision: python -m forge_vigil review show {request_id}{db_flag}")
     if result["journaled"]:
         lines.append(f"  kept the requester's copy in {journal_path} (for `review export --all`)")
     return "\n".join(lines)

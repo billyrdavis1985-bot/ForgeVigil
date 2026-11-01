@@ -14,8 +14,10 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from forge_vigil.assessment import FIXTURE_CLEAN_OUTPUT, FixedAssessor, fixed_clean_assessor
 from forge_vigil.dashboard import build_snapshot, render_html
@@ -177,6 +179,43 @@ class DashboardTests(unittest.TestCase):
         first = render_html(build_snapshot(Store(self.db_path, read_only=True)))
         second = render_html(build_snapshot(Store(self.db_path, read_only=True)))
         self.assertEqual(first, second)
+
+    def test_outbox_comes_from_the_same_snapshot_as_the_receipts(self):
+        self.populate()
+        real = Store(self.db_path, read_only=True).snapshot()
+        stub = SimpleNamespace(path=self.db_path, snapshot=lambda: real)
+        self.assertFalse(hasattr(stub, "outbox_items"))
+        snapshot = build_snapshot(stub)  # must not call a separate outbox read
+        self.assertEqual({i["request_id"] for i in snapshot["outbox"]}, {"req-allowed", "req-held-1"})
+
+    def test_concurrent_writes_never_mix_two_states_in_one_export(self):
+        self.record(request_id="req-seed")
+        stop = threading.Event()
+        written = []
+
+        def write_forever():
+            n = 0
+            while not stop.is_set():
+                n += 1
+                try:
+                    self.record(request_id=f"req-race-{n}")
+                    written.append(n)
+                except Exception:
+                    pass
+
+        writer = threading.Thread(target=write_forever, daemon=True)
+        writer.start()
+        try:
+            for _ in range(25):
+                snapshot = build_snapshot(Store(self.db_path, read_only=True))
+                receipt_ids = {r["request_id"] for r in snapshot["requests"]}
+                outbox_ids = {i["request_id"] for i in snapshot["outbox"]}
+                self.assertTrue(outbox_ids <= receipt_ids, outbox_ids - receipt_ids)
+                self.assertEqual(snapshot["summary"]["deliveries_total"], len(snapshot["outbox"]))
+        finally:
+            stop.set()
+            writer.join(timeout=30)
+        self.assertGreater(len(written), 0, "writer never landed a write; the race was vacuous")
 
     def test_dashboard_on_an_empty_database(self):
         Store(self.db_path)

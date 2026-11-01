@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import re
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 
@@ -49,6 +50,15 @@ def token_from_env(environ: Mapping[str, str] | None = None) -> str:
 class ForgeVigilHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 64
+    # Never share a listening port. The socketserver default (reuse on) lets a
+    # second process bind the same port on Windows and silently steal traffic;
+    # a red-team run watched exactly that happen with a stale dev server.
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if os.name == "nt":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     def __init__(
         self,

@@ -12,13 +12,16 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from forge_vigil.assessment import FIXTURE_CLEAN_OUTPUT, FixedAssessor, fixed_clean_assessor
 from forge_vigil.evaluation import load_case_set, run_evaluation
 from forge_vigil.fixtures import default_fixtures
 from forge_vigil.review import decide
+import forge_vigil.review_cases as review_cases_module
 from forge_vigil.review_cases import ExportError, export_case, read_message_file
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService
@@ -163,6 +166,49 @@ class ReviewCaseTests(unittest.TestCase):
         evaluated = run("eval", "--cases", str(self.out))
         self.assertEqual(evaluated.returncode, 0, evaluated.stderr)
         self.assertIn("local.reviews.v1 - 1 cases", evaluated.stdout)
+
+    def test_export_serializes_on_the_cases_file_lock(self):
+        self.record(request_id="req-locked", approval_ref=None)
+        self.decide("req-locked", "release")
+        acquired = []
+        real_lock = review_cases_module.InstanceLock
+
+        class RecordingLock(real_lock):
+            def acquire(self):
+                acquired.append(self.db_path)
+                return super().acquire()
+
+        with mock.patch.object(review_cases_module, "InstanceLock", RecordingLock):
+            self.export("req-locked")
+        self.assertEqual(acquired, [self.out.resolve()])
+
+    def test_concurrent_exports_to_one_file_keep_both_cases(self):
+        for n in range(10):
+            out = self.tmp / f"race-{n}.json"
+            ids = [f"req-race-{n}-a", f"req-race-{n}-b"]
+            for rid in ids:
+                self.record(request_id=rid, approval_ref=None)
+                self.decide(rid, "release")
+            results = {}
+
+            def run(rid, slot):
+                try:
+                    export_case(Store(self.db_path, read_only=True), actor_id="operator",
+                                request_id=rid, message_text=MESSAGE, cases_path=out,
+                                exported_at="2026-10-26T23:00:00Z")
+                    results[slot] = "ok"
+                except ExportError as exc:
+                    results[slot] = exc.code
+
+            threads = [threading.Thread(target=run, args=(rid, slot))
+                       for rid, slot in zip(ids, ("a", "b"))]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=30)
+            self.assertEqual(results, {"a": "ok", "b": "ok"}, n)
+            kept = sorted(entry["id"] for entry in json.loads(out.read_text())["cases"])
+            self.assertEqual(kept, sorted(ids), n)
 
 
 if __name__ == "__main__":

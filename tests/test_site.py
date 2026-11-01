@@ -31,7 +31,7 @@ PAGE_FILES = [filename for filename, *_ in site.PAGES]
 FIGURE_PINS = {
     "headline": "c8746966beecb621d92e347e7299f14991adfea0f967c27d6a437761df44dee9",
     "observed_qualification": "72b50fb1f28fd0ec11635734ba5b1326fffe3c35edda92b086b7bba39600f3c8",
-    "cp24-qual": "741a8a70a89461c16d1c68c3f0c035315d4f3175aa1ea839304d30ea928a4cd1",
+    "cp24-qual": "95caa35610cf4339aa1ec30025b2ddf7f22cff9cc60ae3815318c3c5958ab754",
     "cp06-baseline": "a7745a6c27c1660a2c9e8bea0c2df22c5b4b96e6f14e7111a2c5f395f28f231a",
     "cp07-prompt": "dba60071057812b1f952c65a398383fc10d7b070cb6ef08995b54258f0233c6f",
     "cp21-live16": "11a143565d88020de14fa953a4700b2b513cec8f823829cff30e7a96c2a22791",
@@ -285,6 +285,19 @@ class SiteBuildTests(unittest.TestCase):
         limits = " ".join(parse(self.out / "limits.html").text)
         for title, _ in content.NOT_ESTABLISHED:
             self.assertIn(title, limits)
+
+    def test_suite_card_splits_product_and_site_counts(self):
+        import unittest
+
+        from tools.handshake import count_tests
+
+        total, _ = count_tests(site.ROOT)
+        site_count = unittest.TestLoader().discover(
+            str(site.ROOT / "tests"), pattern="test_site.py",
+            top_level_dir=str(site.ROOT)).countTestCases()
+        evidence = (self.out / "evidence.html").read_text(encoding="utf-8")
+        self.assertIn(f">{total}<", evidence)
+        self.assertIn(f"{total - site_count} product + {site_count} site", evidence)
 
     def test_build_is_deterministic(self):
         with tempfile.TemporaryDirectory() as tmp:

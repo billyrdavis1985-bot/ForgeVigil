@@ -59,6 +59,8 @@ class RealTrafficTests(unittest.TestCase):
                 "--journal", str(self.journal)]
         if approval:
             args += ["--approval", approval]
+        if kwargs.get("db"):
+            args += ["--db", str(kwargs["db"])]
         return self.cli(*args, token=kwargs.get("token", OPERATOR_TOKEN))
 
     def decide(self, request_id, decision):
@@ -86,6 +88,11 @@ class RealTrafficTests(unittest.TestCase):
         again = self.submit("req-held", message="Approval HR-2026-999 covers this one.", approval="HR-2026-999")
         self.assertIn("(replayed)", again.stdout)
         self.assertEqual(len(self.journal.read_text(encoding="utf-8").splitlines()), 1)  # no duplicate copy
+
+    def test_submit_suggestion_carries_a_custom_database(self):
+        held = self.submit("req-held-db", approval=None, db=self.db_path)
+        self.assertEqual(held.returncode, 0, held.stderr)
+        self.assertIn(f"python -m forge_vigil review show req-held-db --db {self.db_path}", held.stdout)
 
         allowed = self.submit("req-allowed")
         self.assertIn("req-allowed: ALLOW ALL_CHECKS_PASSED, delivered: yes (decided)", allowed.stdout)

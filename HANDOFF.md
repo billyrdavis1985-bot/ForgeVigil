@@ -16,7 +16,16 @@ Version now 0.24.0.
   retained unchanged. Branch inventory: 333 tests / 279 mutants.
 - Merged main (nits PR #10 + dashboard PR #11): 339 tests, 285/285
   mutants, both drills, cleanup, zero provider calls. Linux qual PASS.
-- Windows validation pending operator run.
+- Nits batch (merged as PR #10): unknown-schema refusal before the journal-mode flip,
+  loud spend resolution, key symlink refusal, versioned server string, default
+  journal export protection; 6 tests, 6 mutants. One existing export mock
+  narrowed to creation calls with intent preserved (see PR).
+- Windows validation reported via operator console transcript 2026-10-31 (head `fab7e19`
+  by timeline; suite inventory 339 matches): 339 tests OK with 17 platform skips,
+  260 of 260 runnable defects caught (25 skipped), demo PASS, both drills PASS,
+  cleanup PASS, 0 provider calls. Original JSON still on the operator PC at
+  `E:\App_Cache\forgevigil-qualification-results-4wt3zhd7\qualification.json`,
+  not independently audited.
 
 # Prior CP23 — one-file Defender scan, 0.23.0; Windows validated, original JSON audited
 
@@ -36,10 +45,6 @@ Base tree: 047250c701c9b5c8e769feb58c8b79e2f1a938a5. Version now 0.23.0.
 - New tests: 34 (stub-engine harness; real-engine behavior proven only by
   operator PC evidence); deliberate defects: 13. All prior tests and mutants
   are retained unchanged. Total inventory at merge: 324 tests / 271 mutants.
-- Nits batch (merged as PR #10): unknown-schema refusal before the journal-mode flip,
-  loud spend resolution, key symlink refusal, versioned server string, default
-  journal export protection; 6 tests, 6 mutants. One existing export mock
-  narrowed to creation calls with intent preserved (see PR).
 - Linux qualification PASS: 324 tests, 271/271 mutants, both drills, cleanup,
   zero provider calls.
 - Windows validation observed and original JSON audited 2026-10-30: win32,
@@ -145,10 +150,10 @@ follows only after its own scope is assigned; status/mode is operator-reported.
 No dashboard, second model, hosting, external delivery or automated remediation
 is added here.
 
-## Proposed side task — forgevigil.com website (uncommitted; operator decision pending)
+## Side task — forgevigil.com website (merged in PR #14; deployment still to be confirmed separately)
 
-Requested by the operator on 2026-10-31 as optional work alongside the hackathon project; the operator
-decides whether it enters the repository and, separately, whether it is deployed. Not a checkpoint:
+Requested by the operator on 2026-10-31 as optional work alongside the hackathon project; it entered
+the repository as PR #14, while deployment remains a separate operator decision. Not a checkpoint:
 code version, policy, prompts, schemas, fixtures, cases, receipts, store, existing tests and
 `tools/mutation_check.py` are unchanged.
 
@@ -177,8 +182,9 @@ Base main commit: 315ae7efb1a7d57e3421f6069708b1e24e59b3d7 (merged CP23 deprecat
   inline style, removed caveat, edited recorded figure, inflated headline, dropped credential case,
   dropped scope path) were each caught by `tests.test_site`; no mutant was added to
   `tools/mutation_check.py`.
-- Not yet observed: Windows qualification with this change, the `website-build` and
-  `offline-qualification` GitHub Actions runs, and a real Cloudflare Pages preview build.
+- Observed after merge: `website-build` and 4-leg `offline-qualification` (Linux and
+  Windows, Python 3.11 and 3.13) both green on PR #14 and on main `6bb5c5a`.
+  Not yet observed: a real Cloudflare Pages preview build; nothing has been deployed.
 
 ## Historical handoff — superseded current-state instructions
 

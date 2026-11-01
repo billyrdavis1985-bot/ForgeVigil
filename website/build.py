@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import sys
+import unittest
 from html import escape
 from pathlib import Path
 
@@ -90,6 +91,8 @@ def source_facts(git_executable: str = "git") -> dict:
     shipped = json.loads((ROOT / "forge_vigil" / "eval_cases.json").read_text("utf-8"))["cases"]
     holdout = json.loads((ROOT / "forge_vigil" / "eval_cases_holdout.json").read_text("utf-8"))["cases"]
     tests, _errors = count_tests(ROOT)
+    site_tests = unittest.TestLoader().discover(
+        str(ROOT / "tests"), pattern="test_site.py", top_level_dir=str(ROOT)).countTestCases()
     git = git_facts(ROOT, git_executable)
     return {
         "code_version": versions.CODE_VERSION,
@@ -98,6 +101,8 @@ def source_facts(git_executable: str = "git") -> dict:
         "commit": git["commit"],
         "uncommitted": git["uncommitted_paths"],
         "tests": tests,
+        "tests_product": tests - site_tests,
+        "tests_site": site_tests,
         "mutants": len(MUTANTS),
         "cases": len(shipped),
         "holdout": len(holdout),
@@ -483,7 +488,9 @@ def page_evidence(facts: dict) -> tuple[str, str, str]:
             f'{C.repo_file("README.md#checkpoint-history")}">ForgeVigil README, checkpoint history</a></p></div></section>'
         )
     controls = stat_cards([
-        (str(facts["tests"]), "tests in the suite", f"counted from this build’s source, v{facts['code_version']}"),
+        (str(facts["tests"]), "tests in the suite",
+         f"{facts['tests_product']} product + {facts['tests_site']} site, "
+         f"counted from this build’s source, v{facts['code_version']}"),
         (str(facts["mutants"]), "deliberate defects", "rules broken on purpose; the gate requires every one caught"),
         ("$0.00", "spend to qualify", "no model calls or provider access needed"),
     ])

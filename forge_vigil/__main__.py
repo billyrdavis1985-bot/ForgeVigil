@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     text.add_argument("--message-file", type=Path, help="a UTF-8 or UTF-16 file holding the message")
     submit.add_argument("--request-id", help="default: a new unique id")
     submit.add_argument("--port", type=int, default=8787, help="the port `serve` listens on (127.0.0.1 only)")
+    submit.add_argument("--db", type=Path, default=None,
+                        help="the state file the server uses; shown in review suggestions (not verified)")
     submit.add_argument("--journal", type=Path, default=Path("var/sent.jsonl"),
                         help="where to keep the requester's copy of recorded requests")
     submit.add_argument("--no-journal", action="store_true", help="keep no copy of the message")
@@ -439,7 +441,9 @@ def _show_case(args) -> int:
     if args.json:
         print(json.dumps({"receipt": receipt, "review": review}, indent=2, sort_keys=True))
     else:
-        print(describe_case(receipt, review, current_approval_status=current))
+        default_db = Path("var/forgevigil.sqlite3")
+        print(describe_case(receipt, review, current_approval_status=current,
+                            db_path=None if args.db == default_db else args.db))
     return 0
 
 
@@ -476,7 +480,7 @@ def _submit(args) -> int:
     except OSError as exc:
         print(f"recorded by the server, but the journal could not be written ({exc.strerror or exc})", file=sys.stderr)
         return 1
-    print(describe(result, request_id, journal))
+    print(describe(result, request_id, journal, args.db))
     return 0 if result["recorded"] else 1
 
 
