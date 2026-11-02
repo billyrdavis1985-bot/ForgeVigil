@@ -1009,6 +1009,10 @@ MUTANTS: tuple[Mutant, ...] = (
            (('    protected.append(Path("var/sent.jsonl").resolve())  # same default-journal guard as the report path\n', '    pass  # journal unprotected\n'),),
            'tests.test_json_output.JsonOutputTests.test_dashboard_protects_the_default_journal_destination'),
 
+    Mutant('serve shows a raw traceback on a busy port', 'forge_vigil/__main__.py',
+           (('        except OSError as exc:\n            import errno\n', '        except OSError as exc:\n            raise\n'),),
+           'tests.test_checkpoint.RequestBoundaryTests.test_serve_refuses_a_busy_port_without_a_traceback'),
+
 )
 
 

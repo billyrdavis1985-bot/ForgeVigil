@@ -109,6 +109,22 @@ class RequestBoundaryTests(_TempStateTest):
             second = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=port, quiet=True)
             self.addCleanup(second.server_close)
 
+    def test_serve_refuses_a_busy_port_without_a_traceback(self):
+        import io
+        import socket
+        from contextlib import redirect_stderr
+        from unittest.mock import patch
+        from forge_vigil.__main__ import _serve
+        squatter = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(squatter.close)
+        squatter.bind(("127.0.0.1", 0))
+        squatter.listen(1)
+        port = squatter.getsockname()[1]
+        err = io.StringIO()
+        with patch.dict(os.environ, {TOKEN_ENV_VAR: OPERATOR_TOKEN}), redirect_stderr(err):
+            self.assertEqual(_serve(self.db_path, port, None), 2)
+        self.assertIn(f"port {port} is already in use", err.getvalue())
+
     def test_authentication_precedes_parsing_size_limits_and_work(self):  # [check 14]
         assessor = CountingAssessor()
         harness = self.harness(assessor=assessor)

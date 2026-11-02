@@ -160,6 +160,11 @@ class SiteBuildTests(unittest.TestCase):
         self.assertIn('<a href="/">Back to forgevigil.com</a>', page)
         self.assertLess(page.index(label), page.index("<h2>"))
 
+    def test_limits_entries_keep_title_and_body_apart(self):
+        page = (self.out / "limits.html").read_text(encoding="utf-8")
+        self.assertNotRegex(page, r"</b>[A-Z]")
+        self.assertIn("scale:</b> All 61", page)
+
     def test_walkthrough_never_hides_the_known_gap(self):
         cases = {c["id"]: c for c in site.walkthrough_cases()}
         self.assertEqual(list(cases), [cid for cid, _ in content.FEATURED])
