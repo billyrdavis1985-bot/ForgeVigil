@@ -253,7 +253,7 @@ alt="The ForgeVigil shield: a metal shield with circuit traces guarding document
 <section class="section"><div class="wrap">
 <div class="section-head"><p class="eyebrow">The problem</p>
 <h2>Manipulation now writes fluently, and small teams have no security desk</h2>
-<p>A convincing message asks you to send a file, change where it goes, or skip the usual checks “just this once.”
+<p>ForgeVigil governs one boundary: the release of outgoing documents — who is authorized, which document can go, to whom, and what happens when evidence is uncertain. A convincing message asks you to send a file, change where it goes, or skip the usual checks “just this once.”
 AI makes those messages cheap to write and hard to tell apart. Putting an AI assistant in charge of sending documents
 adds a new risk: the message can try to talk the assistant itself into it.</p></div>
 <div class="grid grid-3">
