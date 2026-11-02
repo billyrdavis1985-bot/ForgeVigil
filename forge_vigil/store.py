@@ -296,8 +296,10 @@ class Store:
             raise RuntimeError(f"unsupported store schema {version!r}; refusing to migrate implicitly")
         with self._reader() as conn:
             tables = {row[0] for row in
-                      conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
-                                   "AND name NOT LIKE 'sqlite_%' ESCAPE '\\'")}
+                      conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        # Literal prefix, not LIKE: a bare _ is a wildcard, so LIKE 'sqlite_%'
+        # would also swallow lookalikes like sqlitex_invoices.
+        tables = {name for name in tables if not name.startswith("sqlite_")}
         if version is None and tables:
             raise RuntimeError("not a ForgeVigil database: it holds tables but no store metadata; "
                                "refusing to write into it")

@@ -1,4 +1,17 @@
-# Current CP24 — read-only one-file HTML dashboard, 0.24.0
+# Current PR #19 — sample CSP, no-cloud wording, store guard, journal guard, workflow perms
+
+Base main commit: 202005e57e71c045bc39df449e5d6fe0b12289b7 (merged PR #18, version 0.24.0).
+PR branch head: filled after Billy builds the branch from the patch.
+
+- Tests: 367 (349 product + 18 site); defects: 293/293. New tests: sample CSP label
+  (item 1), sqlite lookalike refusal (item 3), dashboard journal protection (item 4).
+  New mutants for items 3 and 4; item 1 extends the site checks without a new mutant.
+- Deployment: forgevigil.com live from `website` at 202005e (footer verified naming
+  the commit). PR #19 reaches prod via website fast-forward after merge.
+- Next: branch protection holds the real gates (stale Workers Builds rule removed for
+  #18); merge PR #19, rehearse, film, file by Nov 3, Nov 4 buffer.
+
+# Prior CP24 — read-only one-file HTML dashboard, 0.24.0
 
 CP24 adds `dashboard --db state.sqlite3 --out page.html`: a read-only export
 of a database as one self-contained HTML file. Counts, dispositions,
@@ -142,13 +155,8 @@ No new paid inference is authorized in CP22.
 
 ## Next steps
 
-Cloud and Windows qualification have passed and the original records are
-audited. Review the staged tree (index 26cb81bd; the PC worktree shows
-CRLF-only noise with zero content diff — review the index, not the worktree),
-then publishing remains a separate specific approval. Defender integration
-follows only after its own scope is assigned; status/mode is operator-reported.
-No dashboard, second model, hosting, external delivery or automated remediation
-is added here.
+Branch protection requires the real gates (the stale Workers Builds rule was removed for
+PR #18). Merge PR #19, rehearse the demo, film, file by Nov 3; Nov 4 is buffer.
 
 ## Side task — forgevigil.com website (merged in PR #14; deployment still to be confirmed separately)
 

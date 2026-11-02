@@ -251,6 +251,24 @@ class InstanceLockTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             Store(self.db_path)
 
+    def test_a_sqlite_lookalike_table_is_still_a_foreign_database(self):
+        foreign = self.tmp / "lookalike.sqlite3"
+        conn = sqlite3.connect(foreign)
+        try:
+            conn.execute("CREATE TABLE sqlitex_invoices (id INTEGER PRIMARY KEY)")
+            conn.commit()
+        finally:
+            conn.close()
+        with self.assertRaises(RuntimeError):
+            Store(foreign)
+        conn = sqlite3.connect(foreign)
+        try:
+            tables = sorted(row[0] for row in
+                            conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'"))
+        finally:
+            conn.close()
+        self.assertEqual(tables, ["sqlitex_invoices"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import unittest
@@ -280,9 +281,7 @@ as intended on those cases; they are not field results.</p></div>
 
 <section class="section"><div class="wrap grid grid-2">
 <div><p class="eyebrow">Built for small operators</p><h2>Local by design</h2>
-<p>ForgeVigil runs on your own computer with Python’s standard library: no packages to install, no cloud service in
-the decision path. Delivery goes to a local outbox. A person reviews anything held, from the command line, never over
-the network.</p>
+<p>ForgeVigil runs on your own computer with Python’s standard library: no packages to install. Policy enforcement, state, and outbox are local. Muse assessment, when in scope, is remote, advisory, and does not grant delivery. Delivery goes to a local outbox. A person reviews anything held, from the command line, never over the network.</p>
 <p>Stored requests are kept as keyed fingerprints rather than message text, and backups prove the key matches the
 database before you rely on them.</p></div>
 <div><p class="eyebrow">Also included</p><h2>Offline email and file checks</h2>
@@ -722,6 +721,35 @@ def release_problems(facts: dict, environ: dict | None = None) -> list[str]:
     return problems
 
 
+def sample_dashboard_for_site(raw: str, stylesheet: str) -> str:
+    """Adapt the committed dashboard sample to the site CSP.
+
+    The local export carries its own inline stylesheet, which the site's
+    `style-src 'self'` header forbids. The transform swaps it for the site's
+    fingerprinted stylesheet, drops the meta policy's `unsafe-inline`, and
+    labels the page a fictional example with a way back to the site.
+    """
+    styled, found = re.subn(r"<style>.*?</style>", "", raw, count=1, flags=re.DOTALL)
+    if not found:
+        raise SystemExit("sample dashboard has no <style> block to replace")
+    page = styled.replace("</head>",
+                          f'<link rel="stylesheet" href="{stylesheet}">\n</head>', 1)
+    page = page.replace("style-src 'unsafe-inline'", "style-src 'self'")
+    label = ('<p class="sample-note"><strong>Fictional static example, not real traffic.</strong> '
+             '<a href="/">Back to forgevigil.com</a></p>\n')
+    marker = "<h1>ForgeVigil dashboard</h1>"
+    if marker not in page:
+        raise SystemExit("sample dashboard has no <h1> to label")
+    page = page.replace(marker, marker + "\n" + label, 1)
+    for probe, why in (("<style", "inline style block"), ("unsafe-inline", "unsafe-inline CSP"),
+                       ("style=", "style attribute")):
+        if probe in page:
+            raise SystemExit(f"sample dashboard still has {why} after the site transform")
+    if re.search(r"<[^>]*\son\w+\s*=", page):
+        raise SystemExit("sample dashboard has an event-handler attribute")
+    return page
+
+
 def build(out: Path = DEFAULT_OUT, *, release: bool = False, git_executable: str = "git",
           environ: dict | None = None) -> dict:
     """Build the site into `out`. With release=True, refuse unless release_problems() is empty."""
@@ -751,8 +779,11 @@ def build(out: Path = DEFAULT_OUT, *, release: bool = False, git_executable: str
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(item, target)
     # The sample dashboard is generated from live code by
-    # website/sample_dashboard.py and committed; the build ships it verbatim.
-    shutil.copyfile(Path(__file__).resolve().parent / "demo-dashboard.html", out / "demo-dashboard.html")
+    # website/sample_dashboard.py and committed; the build adapts it to the
+    # site CSP (external stylesheet, no inline style) on the way out.
+    sample = Path(__file__).resolve().parent / "demo-dashboard.html"
+    _write(out / "demo-dashboard.html", sample_dashboard_for_site(sample.read_text(encoding="utf-8"),
+                                                                 assets["style.css"]))
 
     for filename, path, builder, scripts, _ in PAGES:
         title, description, body = builder(facts)
