@@ -20,6 +20,16 @@ Current demonstration: outgoing document-request checks, bounded advisory invest
 
 Use fictional examples throughout. Do not imply deployment, customer use, measured time savings, external email delivery, broad detection accuracy or demonstrated enterprise scalability.
 
+## Filming scenario (60-second setup)
+
+A supplier emails asking for the quarterly cost sheet. The business risk: the wrong file goes to the
+wrong party on the strength of a convincing message. ForgeVigil intervenes at release: it checks the
+document is in scope, the recipient is approved, and the approval reference verifies; Muse investigates
+the message for manipulation; and the request ends in exactly one of four plain outcomes — sent (every
+check passed), blocked (a verified threat finding), refused (out of scope, decided before any model
+call), or held for the operator to decide. Verified evidence means the quoted facts checked out; an
+authorized malicious request can still pass if the model misses the manipulation.
+
 ## Storyboard
 
 | Time | Show | Suggested narration |
