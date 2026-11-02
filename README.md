@@ -698,3 +698,9 @@ Missing or unknown approval never produces ALLOW.
 
 Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the work starts with
 [HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
+
+## How it was built
+
+ForgeVigil was designed and built by Billy Davis with AI assistance from three Meta models: two
+Muse Spark sessions (implementation, testing, and hardening) and Muse (Pip) for documentation
+and demo review. All commits, merges, and final decisions are the human operator's.

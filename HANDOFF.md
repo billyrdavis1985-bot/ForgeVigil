@@ -1,7 +1,7 @@
 # Current PR #19 — sample CSP, no-cloud wording, store guard, journal guard, workflow perms
 
 Base main commit: 202005e57e71c045bc39df449e5d6fe0b12289b7 (merged PR #18, version 0.24.0).
-PR branch head: filled after Billy builds the branch from the patch.
+PR branch head: 1797d19 (branch pr-19-fixes; merged as d0f7b10).
 
 - Tests: 367 (349 product + 18 site); defects: 293/293. New tests: sample CSP label
   (item 1), sqlite lookalike refusal (item 3), dashboard journal protection (item 4).

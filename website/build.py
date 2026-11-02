@@ -218,8 +218,9 @@ def layout(path: str, title: str, description: str, body: str, facts: dict, asse
 <footer class="site-footer"><div class="wrap">
 <div class="cols">
 <div><a class="brand" href="/">{MARK}ForgeVigil</a>
-<p class="small footer-about">Open-source research prototype by Billy Davis, exploring how agentic AI can help small
-businesses defend against AI-enabled manipulation. MIT licensed.</p></div>
+<p class="small footer-about">Open-source research prototype by Billy Davis, built with AI assistance from Meta Muse Spark
+and Muse, exploring how agentic AI can help small businesses defend against AI-enabled manipulation.
+MIT licensed.</p></div>
 <div><h2>Project</h2><ul><li><a href="{C.REPO}">Source on GitHub</a></li><li><a href="/evidence">Evidence</a></li>
 <li><a href="/limits">Limits</a></li><li><a href="/get-started">Get started</a></li></ul></div>
 <div><h2>Site</h2><ul><li><a href="/security">Security</a></li><li><a href="/privacy">Privacy</a></li>
