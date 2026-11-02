@@ -696,7 +696,14 @@ def _serve(db_path: Path, port: int, assessor_kind: str | None, authority_kind: 
             return 2
         if service.recovered:
             print(f"held {len(service.recovered)} incomplete request(s) for REVIEW after restart")
-        server = ForgeVigilHTTPServer(service, {token: OPERATOR_ACTOR_ID}, port=port)
+        try:
+            server = ForgeVigilHTTPServer(service, {token: OPERATOR_ACTOR_ID}, port=port)
+        except OSError as exc:
+            import errno
+            in_use = exc.errno in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", None))
+            detail = f"port {port} is already in use" if in_use else f"cannot bind port {port}"
+            print(f"refusing to start: {detail}", file=sys.stderr)
+            return 2
         print(f"ForgeVigil listening on http://{BIND_HOST}:{server.server_port} ({mode})", flush=True)
         print("Development server: local only, NOT a public deployment server.", flush=True)
         try:

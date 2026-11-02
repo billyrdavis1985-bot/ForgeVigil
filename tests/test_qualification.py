@@ -5,6 +5,7 @@ import copy
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -39,6 +40,19 @@ def synthetic_suite(outcomes=('pass',)):
 
 
 class QualificationTests(unittest.TestCase):
+    def test_readme_test_count_matches_the_suite(self):
+        line = next(line for line in (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+                    if "tests (" in line and "product" in line)
+        total, product, site = map(int, re.search(r"# (\d+) tests \((\d+) product \+ (\d+) site\)",
+                                                  line).groups())
+        loader = unittest.TestLoader()
+        modules = [path.stem for path in sorted((ROOT / "tests").glob("test_*.py"))]
+        counted = sum(loader.loadTestsFromName(f"tests.{name}").countTestCases() for name in modules)
+        site_count = loader.loadTestsFromName("tests.test_site").countTestCases()
+        self.assertEqual(counted, total)
+        self.assertEqual(counted - site_count, product)
+        self.assertEqual(site_count, site)
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix='forgevigil-qualification-test-')
         self.addCleanup(tmp.cleanup)

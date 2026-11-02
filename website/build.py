@@ -527,7 +527,7 @@ def page_evidence(facts: dict) -> tuple[str, str, str]:
 
 
 def page_limits(facts: dict) -> tuple[str, str, str]:
-    items = "".join(f"<li><b>{e(t)}</b>{e(b)}</li>" for t, b in C.NOT_ESTABLISHED)
+    items = "".join(f"<li><b>{e(t)}:</b> {e(b)}</li>" for t, b in C.NOT_ESTABLISHED)
     body = hero("Limits", "What ForgeVigil doesn’t do, yet",
                 "A security tool is only useful if you know where it stops. These limits come straight from the "
                 "project’s own records.") + f"""
