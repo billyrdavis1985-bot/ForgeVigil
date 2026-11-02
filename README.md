@@ -1,5 +1,5 @@
 # ForgeVigil
-<img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with circuit lines and document icons, with an orange V" width="1280" />
+<img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with glowing circuit lines" width="1200" />
 
 
 ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
