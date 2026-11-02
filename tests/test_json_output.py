@@ -21,7 +21,7 @@ from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
 from forge_vigil import json_output
-from forge_vigil.__main__ import _report, main
+from forge_vigil.__main__ import _dashboard, _report, main
 from forge_vigil.evaluation import CASES_PATH, run_cases, run_evaluation
 from forge_vigil.store import Store
 
@@ -81,11 +81,49 @@ class JsonOutputTests(unittest.TestCase):
         if created_parent:
             self.addCleanup(lambda: destination.parent.rmdir() if not any(destination.parent.iterdir()) else None)
         before = destination.read_bytes() if destination.exists() else None
+        # A mutated run may leave an empty partial behind; remove only that, never real content.
+        self.addCleanup(lambda: destination.unlink() if before is None and destination.is_file()
+                        and destination.stat().st_size == 0 else None)
         with redirect_stderr(io.StringIO()), patch(
             "forge_vigil.report.build_report", side_effect=AssertionError("must refuse before reading")
         ):
             self.assertEqual(_report(self.db, destination), 2)
             self.assertEqual(destination.read_bytes() if destination.exists() else None, before)
+
+    def test_dashboard_protects_the_default_journal_destination(self):
+        destination = Path("var/sent.jsonl").resolve()
+        # The parent must exist so the refusal comes from the protected list,
+        # not from the missing-parent pre-check.
+        created_parent = not destination.parent.exists()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if created_parent:
+            self.addCleanup(lambda: destination.parent.rmdir() if not any(destination.parent.iterdir()) else None)
+        before = destination.read_bytes() if destination.exists() else None
+        # A mutated run may leave an empty partial behind; remove only that, never real content.
+        self.addCleanup(lambda: destination.unlink() if before is None and destination.is_file()
+                        and destination.stat().st_size == 0 else None)
+        # A real journal from earlier runs would trip the already-exists check first;
+        # move its bytes aside so this test proves the guard fires, then restore them.
+        stashed = None
+        if before is not None:
+            stashed = self.tmp / "sent.jsonl.stashed"
+            stashed.write_bytes(before)
+            destination.unlink()
+        try:
+            err = io.StringIO()
+            with redirect_stderr(err), redirect_stdout(io.StringIO()), patch(
+                "forge_vigil.dashboard.build_snapshot", side_effect=AssertionError("must refuse before reading")
+            ):
+                self.assertEqual(_dashboard(self.db, destination), 2)
+                # The guard must fire, not the already-exists check: a leftover partial
+                # from another test must not stand in for the protection.
+                self.assertIn("output overlaps protected input or database state", err.getvalue())
+                self.assertFalse(destination.exists())
+        finally:
+            if stashed is not None:
+                destination.write_bytes(stashed.read_bytes())
+        if before is not None:
+            self.assertEqual(destination.read_bytes(), before)
 
     def test_eval_refuses_input_cases_and_registry_before_assessment(self):
         cases = self.tmp / "cases.json"

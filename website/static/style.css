@@ -265,3 +265,14 @@ li + li { margin-top: 0.35em; }
 .grid > *, .wt > *, .hero-grid > * { min-width: 0; }
 .badge-row { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
 [tabindex='-1']:focus { outline: none; }
+
+/* ---------- Sample dashboard (demo-dashboard.html) ---------- */
+/* The committed sample ships without its inline export stylesheet so it satisfies the site CSP; these rules style the export's own classes. */
+.sample-note { background: var(--accent-soft); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0.7rem 1rem; }
+.disposition { font-weight: 600; }
+.d-ALLOW { color: var(--allow); }
+.d-BLOCK { color: var(--block); }
+.d-DENY { color: var(--deny); }
+.d-REVIEW { color: var(--review); }
+details { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); margin: 0 0 0.75rem; padding: 0.6rem 0.9rem; }
+summary { cursor: pointer; font-weight: 500; }

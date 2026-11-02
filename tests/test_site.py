@@ -96,7 +96,7 @@ class SiteBuildTests(unittest.TestCase):
         self.assertIn("default-src 'none'", headers)
         self.assertIn("script-src 'self'", headers)
         self.assertNotIn("unsafe-inline", headers)
-        for name in PAGE_FILES:
+        for name in PAGE_FILES + ["demo-dashboard.html"]:
             page = parse(self.out / name)
             raw = (self.out / name).read_text(encoding="utf-8")
             self.assertNotIn("<style", raw, name)
@@ -104,6 +104,8 @@ class SiteBuildTests(unittest.TestCase):
                 self.assertNotIn("style", attrs, f"{name}: style attribute on <{tag}>")
                 self.assertFalse(any(k.startswith("on") for k in attrs), f"{name}: event handler on <{tag}>")
                 if tag == "script":
+                    if attrs.get("type") == "application/json":
+                        continue  # data block, never executed
                     self.assertTrue(attrs.get("src", "").startswith("/"), f"{name}: inline or external script")
                 if tag == "link" and attrs.get("rel") == "stylesheet":
                     self.assertTrue(attrs["href"].startswith("/"), f"{name}: external stylesheet")
@@ -118,7 +120,7 @@ class SiteBuildTests(unittest.TestCase):
             target = self.out / path.lstrip("/")
             return target.is_file() or target.with_name(target.name + ".html").is_file()
 
-        for name in PAGE_FILES:
+        for name in PAGE_FILES + ["demo-dashboard.html"]:
             ids = {attrs["id"] for _, attrs in parse(self.out / name).tags if "id" in attrs}
             for tag, attrs in parse(self.out / name).tags:
                 url = attrs.get("href") or attrs.get("src") or ""
@@ -150,6 +152,13 @@ class SiteBuildTests(unittest.TestCase):
         committed = normalize((site.ROOT / "website" / "demo-dashboard.html").read_text(encoding="utf-8"))
         self.assertEqual(fresh, committed,
                          "regenerate website/demo-dashboard.html with website/sample_dashboard.py")
+
+    def test_sample_dashboard_labels_itself_fictional_at_the_top(self):
+        page = (self.out / "demo-dashboard.html").read_text(encoding="utf-8")
+        label = "Fictional static example, not real traffic"
+        self.assertIn(label, page)
+        self.assertIn('<a href="/">Back to forgevigil.com</a>', page)
+        self.assertLess(page.index(label), page.index("<h2>"))
 
     def test_walkthrough_never_hides_the_known_gap(self):
         cases = {c["id"]: c for c in site.walkthrough_cases()}

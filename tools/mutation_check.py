@@ -969,7 +969,7 @@ MUTANTS: tuple[Mutant, ...] = (
            'tests.test_digests.DigestTests.test_a_flagged_link_key_is_refused_without_reading'),
 
     Mutant('nits journal destination unprotected', 'forge_vigil/__main__.py',
-           (('    protected.append(Path("var/sent.jsonl").resolve())', '    pass  # journal unprotected'),),
+           (('    protected.append(Path("var/sent.jsonl").resolve())\n', '    pass  # journal unprotected\n'),),
            'tests.test_json_output.JsonOutputTests.test_report_protects_the_default_journal_destination'),
 
     Mutant('nits server version string frozen stale', 'forge_vigil/http_api.py',
@@ -1000,6 +1000,14 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant('redteam submit drops its database hint', 'forge_vigil/__main__.py',
            (('    print(describe(result, request_id, journal, args.db))', '    print(describe(result, request_id, journal))'),),
            'tests.test_client.RealTrafficTests.test_submit_suggestion_carries_a_custom_database'),
+
+    Mutant('pr19 store guard drops its underscore', 'forge_vigil/store.py',
+           (('        tables = {name for name in tables if not name.startswith("sqlite_")}\n', '        tables = {name for name in tables if not name.startswith("sqlite")}\n'),),
+           'tests.test_instance.InstanceLockTests.test_a_sqlite_lookalike_table_is_still_a_foreign_database'),
+
+    Mutant('pr19 dashboard leaves the journal destination open', 'forge_vigil/__main__.py',
+           (('    protected.append(Path("var/sent.jsonl").resolve())  # same default-journal guard as the report path\n', '    pass  # journal unprotected\n'),),
+           'tests.test_json_output.JsonOutputTests.test_dashboard_protects_the_default_journal_destination'),
 
 )
 

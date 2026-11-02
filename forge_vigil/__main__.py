@@ -351,6 +351,7 @@ def _dashboard(db_path: Path, out_path: Path) -> int:
         return 2
     canonical_db = db_path.resolve()
     protected = [Path(str(canonical_db) + suffix) for suffix in ("", ".key", ".lock", "-wal", "-shm", "-journal")]
+    protected.append(Path("var/sent.jsonl").resolve())  # same default-journal guard as the report path
     try:
         with new_output(out_path, protected) as destination:
             snapshot = build_snapshot(Store(db_path, read_only=True))
