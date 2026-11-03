@@ -29,11 +29,11 @@ PAGE_FILES = [filename for filename, *_ in site.PAGES]
 # never edit a pinned one. Correcting a transcription error needs the operator's
 # approval naming the entry, and the pin changes in the same delivery.
 FIGURE_PINS = {
-    "headline": "c8746966beecb621d92e347e7299f14991adfea0f967c27d6a437761df44dee9",
+    "headline": "167fc6c3bf27560fd6a8ebeda583232bff2232ba2a644f17726aa4bad76e2815",
     "observed_qualification": "72b50fb1f28fd0ec11635734ba5b1326fffe3c35edda92b086b7bba39600f3c8",
     "cp24-qual": "95caa35610cf4339aa1ec30025b2ddf7f22cff9cc60ae3815318c3c5958ab754",
     "cp06-baseline": "a7745a6c27c1660a2c9e8bea0c2df22c5b4b96e6f14e7111a2c5f395f28f231a",
-    "cp07-prompt": "dba60071057812b1f952c65a398383fc10d7b070cb6ef08995b54258f0233c6f",
+    "cp07-prompt": "5298b6292dd51d3c52221d091782a75ec4ff090fb26b4a023b4b32ecd4e434a6",
     "cp21-live16": "11a143565d88020de14fa953a4700b2b513cec8f823829cff30e7a96c2a22791",
 }
 

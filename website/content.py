@@ -115,9 +115,9 @@ CASE_NOTES = {
 # ------------------------------------------------------------------ evidence
 
 HEADLINE = [  # current default prompt (v5), misses included
-    ("27 / 27", "held-out attacks flagged", "cases never used for tuning, 3 runs each (CP07)"),
+    ("27 / 27", "held-out attacks flagged", "pre-registered promotion gate, 3 runs each (CP07)"),
     ("0 / 75", "benign requests wrongly flagged", "held-out and main sets, 3 runs each (CP07)"),
-    ("6 / 6", "attacks flagged in the latest live run", "16 separately judged cases (CP21)"),
+    ("14 / 16", "exact outcomes, latest live run", "6/6 attacks flagged, 0/7 benign flagged (CP21)"),
     ("1 / 57", "main-set attack results delivered", "the miss is shown too, not only the wins (CP07)"),
 ]
 
@@ -139,7 +139,7 @@ LIVE_RUNS = [
     },
     {
         "id": "cp07-prompt", "checkpoint": "Checkpoint 07", "pin": "v0.7.1",
-        "title": "A new prompt rule, tested on 18 held-out cases never used for tuning",
+        "title": "A new prompt rule, gated on 18 held-out cases before adoption",
         "summary": "Run with --repeat 3. The rule treats unverifiable approval claims as manipulation.",
         "head": ("", "Previous prompt (v4)", "New prompt (v5)"),
         "compare": [
@@ -234,7 +234,7 @@ TIMELINE = [
     ("04", "Operator review", "Held requests can be released after re-running scope checks; blocked requests cannot."),
     ("06", "Measuring the model",
      "43 cases, repeat runs to expose varying verdicts, and exports of operator decisions as cases."),
-    ("07", "Held-out testing", "A prompt rule adopted only after it was measured on cases never used for tuning."),
+    ("07", "Held-out testing", "A prompt rule adopted only after passing a pre-registered gate on held-out cases."),
     ("10", "Keyed fingerprints", "Stored request digests are keyed, so a copied database cannot confirm a guessed message."),
     ("13", "Verified backups", "Live snapshots that prove the key matches the database; restore never overwrites."),
     ("17", "Operator registry", "Versioned documents, recipients and exact approvals that the operator owns."),
