@@ -187,6 +187,24 @@ LIVE_RUNS = [
                 "exactly as predicted with zero unexpected deliveries, with T1 as the expected fixture gap case: "
                 "the fixture assessor never flags, so its ALLOW was bound to happen and detection was not tested.",
     },
+    {
+        "id": "submission-qual", "checkpoint": "Submission build", "pin": "commit d19a48e \u00b7 v0.24.0",
+        "title": "Final control qualification on the submission build",
+        "summary": "The same offline gate, re-run on November 3, 2026 on the build submitted for judging.",
+        "rows": [
+            ("Tests passing", "370 of 370"),
+            ("Deliberate defects caught", "294 of 294"),
+            ("Operator drill stages", "12 of 12"),
+            ("Registry drill stages", "9 of 9"),
+            ("Demo", "PASS"),
+            ("External provider calls", "0"),
+            ("Recorded spend", "$0.00"),
+        ],
+        "note": "Qualified on Linux, Python 3.13. Windows validation the same day: 370 tests with 17 platform "
+                "skips, 269 of 269 runnable defects caught (25 POSIX-only defects skipped), both drills passed. "
+                "Tests and defects were added after CP24 without a code version change, so CP24's 339 and 285 "
+                "remain accurate for commit fab7e19.",
+    },
 ]
 
 CONTROL_POINTS = [

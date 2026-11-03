@@ -230,8 +230,8 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   incomplete/unscanned states. No links are opened, attachment bytes extracted, model called or
   malware verdict issued. Adds 28 tests/16 mutants while retaining every prior assertion/mutant.
   See [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md) for commands, limits and privacy. Defender reports
-  Normal/active with no scan tested; integration needs its own assignment. The current three-day build
-  plan prioritizes email/attachment utility and testing; historical calendar dates do not override it.
+  Normal/active with no scan tested; integration needs its own assignment. At the time, the build plan
+  prioritized email/attachment utility and testing.
 - **Checkpoint 23 (0.23.0; Windows validated):** adds `scan-file --file path` for one fixed custom
   Defender scan of one operator-selected file, with a byte-bound six-outcome report. No remediation,
   elevation, or policy change; exit 0 is never called clean without the engine's own no-threat marker.
