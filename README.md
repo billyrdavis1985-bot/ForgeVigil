@@ -1,5 +1,9 @@
 # ForgeVigil
-<img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with glowing circuit lines" width="1200" />
+[![offline-qualification](https://github.com/billyrdavis1985-bot/ForgeVigil/actions/workflows/qual.yml/badge.svg)](https://github.com/billyrdavis1985-bot/ForgeVigil/actions/workflows/qual.yml)
+[![website-build](https://github.com/billyrdavis1985-bot/ForgeVigil/actions/workflows/website.yml/badge.svg)](https://github.com/billyrdavis1985-bot/ForgeVigil/actions/workflows/website.yml)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)](#quick-start-standard-library-only-python-311313)
+<img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with glowing circuit lines" width="800" />
 
 
 ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
@@ -58,6 +62,9 @@ or spending are required. [QUALIFICATION.md](QUALIFICATION.md) explains the opti
 
 The following checkpoint history records earlier experiments, not current detection guarantees.
 Use [Local operation and state](#local-operation-and-state) for a persistent development server.
+
+<details>
+<summary><strong>Checkpoint history</strong> (all checkpoints, newest last)</summary>
 
 ## Checkpoint history
 
@@ -223,6 +230,8 @@ Not established yet:
   the same author as the policy, is still small, and verdicts vary between runs.
 - The model's own resistance to prompt injection beyond these cases.
 - Readiness for hosting.
+
+</details>
 
 ## Local operation and state
 
