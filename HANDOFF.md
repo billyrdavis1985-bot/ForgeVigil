@@ -1,4 +1,16 @@
-# Current PR #19 — sample CSP, no-cloud wording, store guard, journal guard, workflow perms
+# Current — agent framing and live-demo record (docs only), 0.24.0
+
+Base main commit: 2b8a3bc (merged PR #24). No code, policy, prompt, schema or test changes.
+
+- README opening and site hero/meta description now describe Muse as a bounded agent that
+  chooses read-only tool calls (limits from `muse.py`: 4 model calls, 4 tool calls).
+- DEMO.md records the operator's 2026-11-03 authorization of live inference for recording
+  (spend cap 5.00 USD) and one live rehearsal: `rt-1` BLOCK THREAT_FINDING_SUPPORTED with a
+  verified approval, 2 model and 3 tool calls, 0.01447625 USD. One run; judgment can vary.
+- Deployment: website changes reach forgevigil.com only after merge and the `website`
+  fast-forward.
+
+# Prior PR #19 — sample CSP, no-cloud wording, store guard, journal guard, workflow perms
 
 Base main commit: 202005e57e71c045bc39df449e5d6fe0b12289b7 (merged PR #18, version 0.24.0).
 PR branch head: 1797d19 (branch pr-19-fixes; merged as d0f7b10).
