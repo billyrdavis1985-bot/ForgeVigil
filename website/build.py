@@ -240,9 +240,9 @@ def page_home(facts: dict) -> tuple[str, str, str]:
 <section class="hero"><div class="wrap hero-grid"><div>
 <p class="eyebrow">Open-source research prototype</p>
 <h1>The AI advises. <span class="accent">Code decides.</span></h1>
-<p class="lede">ForgeVigil checks outgoing document requests for small businesses. An AI model investigates each request
-for manipulation, but only deterministic, tested code can let a document leave, and every decision leaves a durable
-receipt.</p>
+<p class="lede">ForgeVigil checks outgoing document requests for small businesses. An AI agent investigates each request
+for manipulation with read-only tools, but only deterministic, tested code can let a document leave, and every decision
+leaves a durable receipt.</p>
 <div class="btn-row"><a class="btn btn-primary" href="/walkthrough">See it decide</a>
 <a class="btn" href="{C.REPO}">Source on GitHub</a></div>
 <div class="pill-row hero-meta"><span class="pill">v{e(facts['code_version'])}</span><span class="pill">Runs on your machine</span>
@@ -301,7 +301,7 @@ relying on it.</p></div>
 <a class="btn" href="/how-it-works">How it works</a></div>
 </div></section>"""
     return ("ForgeVigil: AI advises, code decides",
-            "ForgeVigil checks outgoing document requests for small businesses. An AI model investigates each request "
+            "ForgeVigil checks outgoing document requests for small businesses. An AI agent investigates each request "
             "for manipulation; deterministic code makes the decision; every result leaves a durable receipt.", body)
 
 

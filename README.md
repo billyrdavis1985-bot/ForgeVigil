@@ -6,10 +6,12 @@
 <img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with glowing circuit lines" width="800" />
 
 
-**The AI advises. Code decides.** ForgeVigil checks outgoing document requests
-for small businesses. Meta's Muse Spark investigates each request for
-manipulation using bounded, read-only lookups. Only deterministic, tested
-code can let a document leave, and every decision leaves a durable receipt.
+**The AI advises. Code decides.** ForgeVigil puts a bounded AI agent in front of a small
+business's outgoing documents. For every request, Meta's Muse Spark runs its own investigation:
+it decides what to check, calls read-only tools (approval registry, document facts, recipient
+facts) within a fixed limit of four model turns and four tool calls, and builds a case with cited
+evidence. Deterministic code verifies that evidence and makes the decision, and every decision
+leaves a durable receipt. The agent can stop a document; it can never release one.
 
 **Live site and interactive walkthrough: https://forgevigil.com**
 
