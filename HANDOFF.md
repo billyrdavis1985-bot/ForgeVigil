@@ -9,6 +9,10 @@ Base main commit: 2b8a3bc (merged PR #24). No code, policy, prompt, schema or te
   verified approval, 2 model and 3 tool calls, 0.01447625 USD. One run; judgment can vary.
 - Deployment: website changes reach forgevigil.com only after merge and the `website`
   fast-forward.
+- Consistency pass on d19a48e: evidence page adds a submission-build qualification record
+  (Linux 370 tests, 294/294; operator-supplied Windows 370 with 17 skips, 269/269), so it no
+  longer shows only CP24's 339/285 next to the current 370/294 under the same version. README
+  history no longer calls the CP22 build plan "current"; site legend says "AI agent".
 
 # Prior PR #19 — sample CSP, no-cloud wording, store guard, journal guard, workflow perms
 

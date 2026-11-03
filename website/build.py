@@ -154,7 +154,7 @@ def pipeline() -> str:
     return (
         f'<ol class="pipeline">{items}</ol><div class="legend">'
         '<span><span class="who who-code">code</span> deterministic, tested</span>'
-        '<span><span class="who who-model">Muse · advisory</span> AI model; can hold or block, never allow</span></div>'
+        '<span><span class="who who-model">Muse · advisory</span> AI agent; can hold or block, never allow</span></div>'
     )
 
 
