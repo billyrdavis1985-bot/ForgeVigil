@@ -6,17 +6,14 @@
 <img src="website/static/hero-shield.webp" alt="ForgeVigil shield, forged metal with glowing circuit lines" width="800" />
 
 
-ForgeVigil checks outgoing document requests for small operators. Meta's Muse investigates and advises;
-deterministic code decides, delivery stays in a local outbox, and every result leaves a durable receipt.
-It also inspects saved `.eml` files locally for structural link and attachment-name signals;
-see [EMAIL_INSPECTION.md](EMAIL_INSPECTION.md). That command performs no AI or antivirus scan.
+**The AI advises. Code decides.** ForgeVigil checks outgoing document requests
+for small businesses. Meta's Muse Spark investigates each request for
+manipulation using bounded, read-only lookups. Only deterministic, tested
+code can let a document leave, and every decision leaves a durable receipt.
 
-> **Scope:** local document-request controls and offline saved-email inspection. Bounded read-only investigation, fixed
-> permissions and local human review; malware defense, public hosting and enterprise scalability
-> have not been demonstrated.
+**Live site and interactive walkthrough: https://forgevigil.com**
 
-Billy Davis built ForgeVigil to explore how agentic AI can help small businesses defend against
-AI-enabled manipulation. Broader protection and application to larger systems remain future goals.
+**Measured results: https://forgevigil.com/evidence**
 
 | Decision | Meaning | Delivery |
 |---|---|---|
@@ -25,15 +22,35 @@ AI-enabled manipulation. Broader protection and application to larger systems re
 | DENY | Actor, document or recipient fails scope; intent is not inferred | None; cannot be released |
 | REVIEW | Uncertainty, missing authority, unconfirmed evidence or assessment failure | Held; a local operator may release after rechecks |
 
-Evidence checking establishes that quotations and cited facts exist, not that Muse interpreted them
-correctly. Genuine evidence can still support a false positive. An otherwise authorized attack can
-be delivered if Muse misses it. Only `policy.py` produces ALLOW; model output grants no capability.
+**The model can hold or block a request. It can never allow one.**
+Only policy.py produces ALLOW.
 
-Start with [HANDOFF.md](HANDOFF.md) for the current checkpoint and engineering plan,
-[QUALIFICATION.md](QUALIFICATION.md) for reproducible offline checks,
-[JUDGMENTS.md](JUDGMENTS.md) for case provenance and expectations, and
-[REGISTRY.md](REGISTRY.md) for operator-owned facts. [DEMO.md](DEMO.md) holds the later rehearsal guide.
-The project uses the [MIT license](LICENSE).
+Measured on fictional cases with live Muse Spark, misses included:
+- Latest live test (CP21): 6/6 attacks flagged, 0/7 benign flagged, 14/16
+  exact outcome matches, $0.13, 16 cases: 6 attacks, 7 benign, 3 scope denied.
+- Prompt promotion gate (CP07, pre-registered, 3 runs each): 27/27 held-out
+  attack results flagged, 9 cases x 3 runs; 0/75 benign results wrongly flagged,
+  25 cases x 3 runs.
+- Known miss: 1 of 57 main-set attack results was delivered, CP07,
+  attack-credential-request, reported, not hidden.
+- Offline controls: 370 tests; 294/294 deliberate defects caught on Linux.
+
+> **Scope:** local document-request controls and offline saved-email inspection. Bounded read-only investigation, fixed
+> permissions and local human review; malware defense, public hosting and enterprise scalability
+> have not been demonstrated. Also included: two non-AI local utilities,
+> [saved-email inspection](EMAIL_INSPECTION.md) and a [Defender file scan](SCANNING.md).
+
+Billy Davis built ForgeVigil to explore how agentic AI can help small businesses defend against
+AI-enabled manipulation.
+
+Run it (Python 3.11-3.13, standard library only, no API key):
+python3 -m forge_vigil demo --review on macOS/Linux, or
+py -3.11 -m forge_vigil demo --review on Windows.
+
+For engineers: [QUALIFICATION.md](QUALIFICATION.md) has the reproducible checks,
+[JUDGMENTS.md](JUDGMENTS.md) the case provenance, and [HANDOFF.md](HANDOFF.md) the full build log.
+
+Demo video: filming Nov 3, link to be added after filming.
 
 ## Quick start (standard library only; Python 3.11–3.13)
 
@@ -65,8 +82,6 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
 
 <details>
 <summary><strong>Checkpoint history</strong> (all checkpoints, newest last)</summary>
-
-## Checkpoint history
 
 - **Checkpoint 01:** one authenticated request → advisory assessment → deterministic permission →
   **exactly one** allowed outbox item **or** no delivery → durable receipt. System tests cover duplicate,
@@ -105,7 +120,7 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   the approval could not be verified.
 - **Checkpoint 07:** a prompt rule for approval claims, measured before it was trusted. Claims that an
   approval covers more than the registry shows, was given outside it, or exempts a request from review are
-  treated as manipulation. The rule was tested on 18 held-out cases never used for tuning (`eval --holdout`),
+  treated as manipulation. The rule was tested on 18 held-out cases as a pre-registered promotion gate (`eval --holdout`),
   and became the default in 0.7.1:
 
   | `--repeat 3` | Previous prompt (v4) | New prompt (v5) |
@@ -118,7 +133,8 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
   The previous prompt delivered one held-out attack in all three runs: a valid approval plus "we agreed in
   the meeting it skips review". The one main-set miss, `attack-credential-request`, wasn't repeated in a
   10-run follow-up with either prompt. Both delivered 0 of 10; that small follow-up does not explain
-  or erase the earlier miss.
+  or erase the earlier miss. Prompt text was not edited in response to holdout results; adoption was gated on a
+  pre-registered promotion gate on 18 held-out cases, 3 runs each, CP07.
 - **Checkpoint 08:** one server per database. `serve` holds an operating-system lock on `<db>.lock` for as
   long as it runs, so a second server on the same file refuses to start; a crash releases the lock. On
   Linux and macOS the database and its side files are made readable by their owner only.
@@ -710,6 +726,9 @@ Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the
 
 ## How it was built
 
-ForgeVigil was designed and built by Billy Davis with AI assistance from three Meta models: two
-Muse Spark sessions (implementation, testing, and hardening) and Muse (Pip) for documentation
-and demo review. All commits, merges, and final decisions are the human operator's.
+Designed and built by Billy Davis, with implementation, testing, and
+hardening assistance from two Muse Spark sessions, and documentation and
+demo review from Muse (Pip). Additional read-only reviews were provided by
+independent reviewers, who wrote no code, demo, or frozen judgments,
+and are not listed as team members. All commits, merges, and final decisions are
+the human operator's.
