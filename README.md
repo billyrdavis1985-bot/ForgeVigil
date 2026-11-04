@@ -52,7 +52,7 @@ py -3.11 -m forge_vigil demo --review on Windows.
 For engineers: [QUALIFICATION.md](QUALIFICATION.md) has the reproducible checks,
 [JUDGMENTS.md](JUDGMENTS.md) the case provenance, and [HANDOFF.md](HANDOFF.md) the full build log.
 
-Demo video: filming Nov 3, link to be added after filming.
+**Demo video:** https://youtu.be/2anT6AS-Tcw
 
 ## Quick start (standard library only; Python 3.11–3.13)
 
