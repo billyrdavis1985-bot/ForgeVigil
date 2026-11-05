@@ -485,7 +485,7 @@ def page_evidence(facts: dict) -> tuple[str, str, str]:
             f'<p class="eyebrow">{e(run["checkpoint"])} · {e(run["pin"])}</p><h2>{e(run["title"])}</h2>'
             f'<p>{e(run["summary"])}</p></div><div class="table-wrap prose">{table}</div>'
             f'<p class="prose muted">{e(run["note"])}</p><p class="source">Source: <a href="'
-            f'{C.repo_file("README.md#checkpoint-history")}">ForgeVigil README, checkpoint history</a></p></div></section>'
+            f'{C.repo_file("CHANGELOG.md")}">ForgeVigil changelog, checkpoint history</a></p></div></section>'
         )
     controls = stat_cards([
         (str(facts["tests"]), "tests in the suite",
@@ -518,7 +518,7 @@ def page_evidence(facts: dict) -> tuple[str, str, str]:
 <section class="section" id="history"><div class="wrap">
 <div class="section-head"><h2>How it got here</h2><p>Selected checkpoints. Each one was validated before the next began.</p></div>
 <ol class="timeline prose">{timeline}</ol>
-<p class="source">Full history: <a href="{C.repo_file('README.md#checkpoint-history')}">README</a> ·
+<p class="source">Full history: <a href="{C.repo_file('CHANGELOG.md')}">changelog</a> ·
 <a href="{C.repo_file('HANDOFF.md')}">HANDOFF.md</a></p>
 </div></section>"""
     return ("Evidence",
