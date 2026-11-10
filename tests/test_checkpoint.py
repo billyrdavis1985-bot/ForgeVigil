@@ -8,6 +8,7 @@ fixed fixture and no inference happens.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import subprocess
@@ -28,7 +29,7 @@ from forge_vigil.assessment import (
     fixed_clean_assessor,
 )
 from forge_vigil.fixtures import PUBLIC_SPEC_CONTENT, Approval, FixtureSet, Recipient, default_fixtures
-from forge_vigil.http_api import TOKEN_ENV_VAR, ConfigError, ForgeVigilHTTPServer, validate_token
+from forge_vigil.http_api import TOKEN_ENV_VAR, ConfigError, ForgeVigilHTTPServer, reuse_address_for, validate_token
 from forge_vigil.schema import MAX_BODY_BYTES, MAX_MESSAGE_CHARS, parse_request
 from forge_vigil.service import DECIDED, REPLAYED, ForgeVigilService
 from forge_vigil.store import Store
@@ -100,7 +101,10 @@ class RequestBoundaryTests(_TempStateTest):
     def test_listening_port_cannot_be_shared(self):
         # REDTEAM F1: with reuse on, Windows let a stale dev server keep a port
         # while ForgeVigil also "listened" on it, and traffic went to the stranger.
-        self.assertIs(ForgeVigilHTTPServer.allow_reuse_address, False)
+        # Reuse stays off on Windows; on POSIX it is on and still cannot share a
+        # listening port, which the bind below checks on every platform.
+        self.assertIs(reuse_address_for("nt"), False)
+        self.assertIs(ForgeVigilHTTPServer.allow_reuse_address, reuse_address_for(os.name))
         service = ForgeVigilService(Store(self.db_path), fixed_clean_assessor())
         first = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=0, quiet=True)
         self.addCleanup(first.server_close)
@@ -108,6 +112,32 @@ class RequestBoundaryTests(_TempStateTest):
         with self.assertRaises(OSError):
             second = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=port, quiet=True)
             self.addCleanup(second.server_close)
+
+    @unittest.skipIf(os.name == "nt", "Windows binds exclusively; restart timing there is the OS's TIME_WAIT policy")
+    def test_server_restarts_on_the_same_port_after_serving(self):
+        # Turning reuse off everywhere made `serve` fail with "Address already in
+        # use" for about a minute after any run that had served a request.
+        self.assertIs(reuse_address_for("posix"), True)
+        service = ForgeVigilService(Store(self.db_path), fixed_clean_assessor())
+        first = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=0, quiet=True)
+        port = first.server_address[1]
+        thread = threading.Thread(target=first.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        thread.start()
+        try:
+            for _ in range(3):  # the server closes each connection first, leaving TIME_WAIT on its port
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+                try:
+                    conn.request("GET", "/health")
+                    self.assertEqual(conn.getresponse().status, 200)
+                finally:
+                    conn.close()
+        finally:
+            first.shutdown()
+            first.server_close()
+            thread.join(timeout=5)
+        second = ForgeVigilHTTPServer(service, {OPERATOR_TOKEN: "operator"}, port=port, quiet=True)
+        self.addCleanup(second.server_close)
+        self.assertEqual(second.server_address[1], port)
 
     def test_serve_refuses_a_busy_port_without_a_traceback(self):
         import io

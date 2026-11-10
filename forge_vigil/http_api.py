@@ -47,13 +47,26 @@ def token_from_env(environ: Mapping[str, str] | None = None) -> str:
     return validate_token(environ.get(TOKEN_ENV_VAR))
 
 
+def reuse_address_for(os_name: str) -> bool:
+    """Whether the listening socket sets SO_REUSEADDR on this platform.
+
+    Windows: never. There, SO_REUSEADDR lets a second process bind a port that
+    is already listening and silently take its traffic, which a red-team run
+    watched happen with a stale dev server (REDTEAM F1). The server binds with
+    SO_EXCLUSIVEADDRUSE instead.
+
+    POSIX: yes. There, SO_REUSEADDR never lets a second socket bind a port that
+    is listening, and without it `serve` cannot restart on the same port for
+    about a minute while the previous run's connections sit in TIME_WAIT.
+    """
+    return os_name != "nt"
+
+
 class ForgeVigilHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 64
-    # Never share a listening port. The socketserver default (reuse on) lets a
-    # second process bind the same port on Windows and silently steal traffic;
-    # a red-team run watched exactly that happen with a stale dev server.
-    allow_reuse_address = False
+    # Never share a listening port; see reuse_address_for().
+    allow_reuse_address = reuse_address_for(os.name)
 
     def server_bind(self) -> None:
         if os.name == "nt":
