@@ -16,8 +16,12 @@ unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is
   commit: 202005e. Later merges reach production only when the operator fast-forwards `website`.
 
 ## In flight (not merged)
-- **Integration and re-engineering plan v1** (Gatekeeper patterns into ForgeVigil): open, not frozen
-  (D-004). Belongs in `docs/plans/` as an open plan when the operator chooses to commit it.
+- **Spike `spike/openai-backend`** (never merged): `ProviderProfile` + `OpenAICompatibleAssessor` for
+  Meta Muse, local OpenAI-compatible servers and cloud providers. `meta-muse` is byte-identical to today;
+  `local-openai` is loopback-only. 11 spike tests; qualification PASS on Linux 3.11 (382 tests, 295/295).
+  Findings: `docs/plans/spike-notes/openai-backend.md` on that branch.
+- **Integration and re-engineering plan v1**: `docs/plans/gatekeeper-integration.md` (PR #33), open, not
+  frozen (D-004). Amendment D is proposed and awaits the operator's acceptance, whole or by item.
 
 ## Next steps
 1. Governance v2 is in effect (D-005 approved 2026-11-11): agents push their own branches and open pull
