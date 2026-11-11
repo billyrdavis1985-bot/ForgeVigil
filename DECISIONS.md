@@ -29,7 +29,7 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
   the integrations."
 - Effect: no plan phase is frozen. Only spikes (see `AGENTS.md`) may be built for it until a phase is frozen.
 
-## D-005 — 2026-11-10 — proposed — governance v2
+## D-005 — 2026-11-10 — approved — governance v2
 - Operator's words when asking for it: "Yes exactly and that is the better work flow lets proceed forward."
 - Proposes: the rewritten `AGENTS.md` (fixed safety rules unchanged; scope from checkpoints and frozen plan
   phases plus spikes; models only through the assessor interface with data-flow notes and per-model
@@ -42,8 +42,9 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
   status line in the merge of this change).
 - Merged to `main` by the operator as PR #29 (`17d067e`) on 2026-11-10. Status remains proposed until
   the operator records his approval here.
+- Approved 2026-11-11 by the operator: "I approve governance v2, including the standing grant for agents to push their own branches and open pull requests."
 
-## D-006 — 2026-11-10 — proposed — POSIX `serve` restart fix
+## D-006 — 2026-11-10 — approved — POSIX `serve` restart fix
 - Proposes: `reuse_address_for(os.name)` in `forge_vigil/http_api.py` (reuse off on Windows only).
 - Named changes needing approval: the assertion in
   `tests/test_checkpoint.py::RequestBoundaryTests::test_listening_port_cannot_be_shared` (reuse off for
@@ -55,3 +56,4 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
   `E:\App_Cache\forgevigil-qualification-results-rb98slkv\qualification.json`.
 - Merged to `main` by the operator as PR #29 (`17d067e`) on 2026-11-10. Status remains proposed until
   the operator records his approval here.
+- Approved 2026-11-11 by the operator: "I approve the restart fix and the named test and mutant changes."
