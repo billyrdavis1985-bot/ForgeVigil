@@ -57,3 +57,22 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
 - Merged to `main` by the operator as PR #29 (`17d067e`) on 2026-11-10. Status remains proposed until
   the operator records his approval here.
 - Approved 2026-11-11 by the operator: "I approve the restart fix and the named test and mutant changes."
+
+## D-007 — 2026-11-11 — approved — Amendment D accepted in whole
+- Operator's words: "accept Amendment D and freeze the generic backend phase".
+- Effect: Amendment D of `docs/plans/gatekeeper-integration.md` is accepted in whole (fact corrections,
+  router never skips the assessor, investigator reaches clean in-scope requests, structured-field diffs
+  only, delivery-binding reachability, pass bars, local hash-chained receipts instead of a public
+  ledger, model and data rules, build order D.6). Each replaced v1 line is kept struck through.
+- Recorded by an agent from the operator's instruction; takes effect when the operator merges the pull
+  request that adds this entry.
+
+## D-008 — 2026-11-11 — approved — Phase G1 (generic backend) frozen
+- Operator's words: "accept Amendment D and freeze the generic backend phase".
+- Effect: `docs/plans/phase-g1-generic-backend.md` is frozen: `meta-muse` and `local-openai` profiles,
+  `--assessor local`, offline pass bar, and an operator smoke test on a local server with fictional
+  fixtures. Spend: no live Muse calls and no paid inference; the local smoke test runs zero-priced with a
+  nominal 0.01 USD cap. `local-openai` keeps request text on the operator's machine (loopback only).
+  The `cloud-openai` profile is out of scope until a provider is named with a data-flow note and opt-in.
+- Recorded by an agent from the operator's instruction; takes effect when the operator merges the pull
+  request that adds this entry.
