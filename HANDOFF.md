@@ -4,12 +4,14 @@ Current state only, one screen. Decisions are in `DECISIONS.md`; history up to 2
 unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is in `CHANGELOG.md`.
 
 ## Main
-- Head: `17d067e` (merged PR #29: governance v2 and POSIX `serve` restart fix), version 0.24.0. The
-  hackathon submission was filed at `b470c40` and stands as filed; later work builds on top.
+- Head: `38843e5` (merged PR #31: D-005 and D-006 approved), version 0.24.0. PR #29 (`17d067e`) carried
+  governance v2 and the POSIX `serve` restart fix. The hackathon submission was filed at `b470c40` and
+  stands as filed; later work builds on top.
 - Inventory: 371 tests (352 product + 19 site), 295 deliberate defects (26 POSIX-only).
 - Qualification on this inventory, 2026-11-10: Linux (cloud workspace, Python 3.11 and 3.13) 371 tests,
   295/295 caught; operator's Windows PC 371 tests with 18 skipped, 269/269 runnable caught (26 skipped),
-  demo, both drills and cleanup PASS. GitHub Actions result for PR #29: to be confirmed by the operator.
+  demo, both drills and cleanup PASS. GitHub Actions on `main`: `offline-qualification` (Linux and
+  Windows, Python 3.11 and 3.13) and `website-build` succeeded for `17d067e`, `6ebee14` and `38843e5`.
 - Website: forgevigil.com, Cloudflare Pages, built from the `website` branch. Last recorded production
   commit: 202005e. Later merges reach production only when the operator fast-forwards `website`.
 
@@ -18,9 +20,8 @@ unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is
   (D-004). Belongs in `docs/plans/` as an open plan when the operator chooses to commit it.
 
 ## Next steps
-1. Operator records approval in his own words for D-005 (governance v2, including the standing branch
-   and pull-request grant) and D-006 (restart fix) in `DECISIONS.md`. Until D-005 is approved, agents
-   deliver patches rather than branches.
+1. Governance v2 is in effect (D-005 approved 2026-11-11): agents push their own branches and open pull
+   requests; merges, deployment and spending stay with the operator.
 2. Commit the integration plan as an open plan and amend it (router never skips the assessor,
    investigator reaches clean in-scope requests, no stored request text, realistic pass bars, ledger fit).
 3. Data and model work follows the plan, with independently authored evaluation sets.
