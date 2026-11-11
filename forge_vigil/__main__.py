@@ -1,7 +1,9 @@
 """Command line: `python3 -m forge_vigil serve`, `submit`, `demo`, `eval`, `review`, `report` or `backup`.
 
 serve, demo and eval default to the fixture assessor. `--assessor muse` uses the live Meta
-Model API and needs MODEL_API_KEY and FORGEVIGIL_SPEND_CAP_USD in the environment.
+Model API and needs MODEL_API_KEY and FORGEVIGIL_SPEND_CAP_USD in the environment. `--assessor local`
+(serve and demo) uses a model on a local OpenAI-compatible server on this machine and needs
+FORGEVIGIL_LOCAL_BASE_URL, FORGEVIGIL_LOCAL_MODEL and FORGEVIGIL_SPEND_CAP_USD.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import sys
 from pathlib import Path
 
 ASSESSORS = ("fixture", "muse")
+LIVE_ASSESSORS = ("fixture", "muse", "local")  # serve and demo; eval stays fixture or muse
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     serve = commands.add_parser("serve", help="run the local development server on 127.0.0.1")
     serve.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="SQLite state file")
     serve.add_argument("--port", type=int, default=8787)
-    serve.add_argument("--assessor", choices=ASSESSORS, default=None)
+    serve.add_argument("--assessor", choices=LIVE_ASSESSORS, default=None)
     serve.add_argument("--authority", choices=("fixture", "registry"), default="fixture")
     submit = commands.add_parser("submit", help="send one request to the local server and print the outcome")
     submit.add_argument("--document", required=True, help="document id, for example public-spec")
@@ -43,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="where to keep the requester's copy of recorded requests")
     submit.add_argument("--no-journal", action="store_true", help="keep no copy of the message")
     demo = commands.add_parser("demo", help="three-case smoke demonstration on temporary state")
-    demo.add_argument("--assessor", choices=ASSESSORS, default="fixture")
+    demo.add_argument("--assessor", choices=LIVE_ASSESSORS, default="fixture")
     demo.add_argument("--review", action="store_true", help="finish by releasing the REVIEW case as the operator")
     report = commands.add_parser("report", help="summary of a database: outcomes, reviews, failures, spend")
     report.add_argument("--db", type=Path, default=Path("var/forgevigil.sqlite3"), help="the state file serve uses")
@@ -272,13 +275,14 @@ def _unwritable_output(path: Path | None) -> str | None:
     return None
 
 
-def _live_config():
-    """Validated live-assessor settings, or None after printing why they are unusable."""
+def _live_config(kind: str = "muse"):
+    """Validated live-assessor settings for `muse` or `local`, or None after printing why they are unusable."""
+    from .backends import BackendConfig
     from .errors import ConfigError
     from .muse import MuseConfig
 
     try:
-        return MuseConfig.from_env()
+        return BackendConfig.local_from_env() if kind == "local" else MuseConfig.from_env()
     except ConfigError as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
         return None
@@ -289,7 +293,7 @@ def _demo(assessor: str, with_review: bool) -> int:
 
     if assessor == "fixture":
         return run_demo(with_review=with_review)
-    config = _live_config()
+    config = _live_config(assessor)
     return 2 if config is None else run_demo(live_config=config, with_review=with_review)
 
 
@@ -645,7 +649,7 @@ def _serve(db_path: Path, port: int, assessor_kind: str | None, authority_kind: 
     from .store import Store
 
     if authority_kind == "registry" and assessor_kind is None:
-        print("refusing to start: registry authority requires explicit --assessor fixture or muse", file=sys.stderr)
+        print("refusing to start: registry authority requires explicit --assessor fixture, muse or local", file=sys.stderr)
         return 2
     assessor_kind = assessor_kind or "fixture"
     if not 1 <= port <= 65535:
@@ -658,8 +662,8 @@ def _serve(db_path: Path, port: int, assessor_kind: str | None, authority_kind: 
         print(f"set {TOKEN_ENV_VAR} to a random value of at least 32 characters", file=sys.stderr)
         return 2
     live_config = None
-    if assessor_kind == "muse":
-        live_config = _live_config()
+    if assessor_kind in ("muse", "local"):
+        live_config = _live_config(assessor_kind)
         if live_config is None:
             return 2
 
@@ -686,9 +690,9 @@ def _serve(db_path: Path, port: int, assessor_kind: str | None, authority_kind: 
                 mode = "fixture assessor; no model inference"
             else:
                 from .assessment import format_usd
-                from .muse import MuseAssessor
+                from .backends import live_assessor
 
-                assessor = MuseAssessor(live_config, store, fixtures)
+                assessor = live_assessor(live_config, store, fixtures)
                 mode = f"LIVE assessor {assessor.adapter_id}; spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
             service = ForgeVigilService(store, assessor, fixtures=fixtures)
         except DigestKeyError as exc:

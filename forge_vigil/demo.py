@@ -85,8 +85,9 @@ def _case_ok(expected: str, receipt: dict, live: bool) -> bool:
 
 
 def run_demo(out: TextIO = sys.stdout, live_config=None, with_review: bool = False) -> int:
-    """Fixture mode checks exact dispositions. With a `muse.MuseConfig`, the
-    cases go to the live model and only the safety invariants are checked.
+    """Fixture mode checks exact dispositions. With a live config (`muse.MuseConfig`, or a
+    `backends.BackendConfig` for a local model), the cases go to the live model and only the
+    safety invariants are checked.
     `with_review` finishes with the operator releasing the REVIEW case and
     replaying it. Every run ends with the operator report for its state."""
     live = live_config is not None
@@ -96,9 +97,9 @@ def run_demo(out: TextIO = sys.stdout, live_config=None, with_review: bool = Fal
         store = Store(Path(tmp) / "demo.sqlite3")
         fixtures = default_fixtures()
         if live:
-            from .muse import MuseAssessor
+            from .backends import live_assessor
 
-            assessor = MuseAssessor(live_config, store, fixtures)
+            assessor = live_assessor(live_config, store, fixtures)
             mode = f"live assessor {assessor.adapter_id}, spend cap {format_usd(live_config.spend_cap_nanousd)} USD"
         else:
             assessor = fixed_clean_assessor()

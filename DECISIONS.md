@@ -76,3 +76,14 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
   The `cloud-openai` profile is out of scope until a provider is named with a data-flow note and opt-in.
 - Recorded by an agent from the operator's instruction; takes effect when the operator merges the pull
   request that adds this entry.
+
+## D-009 — 2026-11-11 — proposed — spike merge accepted as G1's starting point
+- Fact: PR #35 (`spike/openai-backend`, titled "SPIKE (never merge)") was merged into `main` as `9cd0914`,
+  against `AGENTS.md`'s rule that spikes are never merged. It added `forge_vigil/backends.py` (including the
+  `cloud-openai` profile), `tests/test_backends.py` (11 tests) and the spike notes; CI passed and nothing
+  selected the new code.
+- Proposes: keep it rather than revert (a revert would remove 11 tests, which the safety-net rule forbids
+  without a named decision), and treat it as Phase G1's starting point. `cloud-openai` stays defined and
+  tested but not selectable from the command line until a provider is named with a data-flow note and
+  opt-in (D-008).
+- Takes effect when the operator merges the pull request that adds this entry.

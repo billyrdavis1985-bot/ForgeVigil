@@ -4,32 +4,31 @@ Current state only, one screen. Decisions are in `DECISIONS.md`; history up to 2
 unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is in `CHANGELOG.md`.
 
 ## Main
-- Head: `38843e5` (merged PR #31: D-005 and D-006 approved), version 0.24.0. PR #29 (`17d067e`) carried
-  governance v2 and the POSIX `serve` restart fix. The hackathon submission was filed at `b470c40` and
-  stands as filed; later work builds on top.
-- Inventory: 371 tests (352 product + 19 site), 295 deliberate defects (26 POSIX-only).
-- Qualification on this inventory, 2026-11-10: Linux (cloud workspace, Python 3.11 and 3.13) 371 tests,
-  295/295 caught; operator's Windows PC 371 tests with 18 skipped, 269/269 runnable caught (26 skipped),
-  demo, both drills and cleanup PASS. GitHub Actions on `main`: `offline-qualification` (Linux and
-  Windows, Python 3.11 and 3.13) and `website-build` succeeded for `17d067e`, `6ebee14` and `38843e5`.
+- Head: `0ab4b95` (merged PR #36: Amendment D accepted, D-007; Phase G1 frozen, D-008), version 0.24.0.
+  PR #35 (`9cd0914`) merged the `spike/openai-backend` work into `main`, against the "spikes are never
+  merged" rule; D-009 (proposed) records it and accepts it as G1's starting point. The hackathon submission
+  was filed at `b470c40` and stands as filed.
+- Inventory on main: 382 tests (363 product + 19 site), 295 deliberate defects (26 POSIX-only).
+- GitHub Actions on `main`: `offline-qualification` (Linux and Windows, Python 3.11 and 3.13) and
+  `website-build` green through `34fb1f0`.
 - Website: forgevigil.com, Cloudflare Pages, built from the `website` branch. Last recorded production
   commit: 202005e. Later merges reach production only when the operator fast-forwards `website`.
 
 ## In flight (not merged)
-- **Spike `spike/openai-backend`** (never merged): `ProviderProfile` + `OpenAICompatibleAssessor` for
-  Meta Muse, local OpenAI-compatible servers and cloud providers. `meta-muse` is byte-identical to today;
-  `local-openai` is loopback-only. 11 spike tests; qualification PASS on Linux 3.11 (382 tests, 295/295).
-  Findings: `docs/plans/spike-notes/openai-backend.md` on that branch.
+- **Phase G1, generic backend** (branch `phase-g1-generic-backend`, version 0.25.0): `--assessor local`
+  for `serve` and `demo`, production `forge_vigil/backends.py`, 393 tests / 300 deliberate defects.
+  Offline pass bar observed in the cloud workspace (see the pull request). Not done until the operator's
+  local smoke test passes (brief, "Operator smoke test").
 - **Integration plan**: `docs/plans/gatekeeper-integration.md`, open; Amendment D accepted in whole (D-007).
-- **Phase G1, generic backend: frozen** (D-008), brief `docs/plans/phase-g1-generic-backend.md`. Next to
-  build, on a feature branch; done only after the offline pass bar and the operator's local smoke test.
 
 ## Next steps
-1. Build Phase G1 to its brief and open one pull request; the operator merges.
-2. Operator: run the G1 smoke test on a local OpenAI-compatible server with one of his models.
+1. Operator reviews and merges the G1 pull request (and approves D-009 by merging it).
+2. Operator: G1 smoke test, `demo --assessor local` against one of his models on a local
+   OpenAI-compatible server, fictional fixtures only; record the result here.
 3. Operator settings: require the CI checks on `main` in the GitHub ruleset; decide on Cloudflare
    per-branch previews (on today, while `website/README.md` says none).
-4. Plan step 0.5: hygiene (REDTEAM F2) and a first consenting pilot operator.
+4. Plan step 0.5: hygiene (REDTEAM F2) and a first consenting pilot operator. Next plan step after G1:
+   D.6 step 2, evidence bundle with excerpt ids (needs its own frozen brief).
 
 ## Open risks
 1. All 61 shipped evaluation cases and the 16 judged cases are fictional and authored by the operator;

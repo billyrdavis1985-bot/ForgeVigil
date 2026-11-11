@@ -160,6 +160,12 @@ not current detection guarantees.
   with the data embedded for offline viewing. No server, no JavaScript, no request text, key
   material, reviewer names, evidence quotes, or absolute paths. Adds 7 tests/8 mutants while
   retaining every prior assertion/mutant. See [DASHBOARD.md](DASHBOARD.md).
+- **Phase G1 (0.25.0):** generic OpenAI-compatible backend. `forge_vigil/backends.py` holds provider
+  profiles: `meta-muse` (today's request, byte for byte, for prompts v4 and v5 including the truncation
+  retry) and `local-openai` (`--assessor local` for `serve` and `demo`: loopback only, no key, zero price,
+  every call still reserved). `cloud-openai` exists from the merged spike but is not selectable (D-008).
+  Policy, prompts, schemas and existing tests unchanged. Adds 11 tests/5 mutants on top of the merged
+  spike's 11 tests. See [docs/plans/phase-g1-generic-backend.md](docs/plans/phase-g1-generic-backend.md).
 
 Not established yet:
 - Muse's detection quality and false-positive rate at a meaningful scale. 61 fictional cases, all written by
