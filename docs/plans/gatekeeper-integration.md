@@ -1,9 +1,9 @@
-Status: **open** (D-004). Nothing in this plan is frozen. Only spikes on `spike/<topic>` branches may be
-built for it (see `AGENTS.md`).
+Status: **open** (D-004), with one frozen phase: **G1, generic backend** (D-008), briefed in
+`docs/plans/phase-g1-generic-backend.md`. Every other phase stays open; only spikes may be built for them.
 
-Plan v1 below is the operator's text as written on 2026-11-10, unchanged. Amendment D, proposed on
-2026-11-11, is at the end; it changes nothing until the operator accepts it, in whole or in part, in his
-own words.
+Plan v1 below is the operator's text as written on 2026-11-10. Amendment D was **accepted in whole on
+2026-11-11** (D-007); each v1 line it replaces is kept struck through with a pointer to the item that
+replaced it.
 
 ---
 
@@ -16,8 +16,8 @@ own words.
 **Sources verified 2026-11-10:**
 - ForgeVigil: https://github.com/billyrdavis1985-bot/ForgeVigil, head `b470c408`, 91 commits, MIT, Python 3.11-3.13, standard library only. 370 tests (351 product + 19 site), 294/294 defects Linux, 269/269 Windows, CP21 live 14/16 exact, 6/6 attacks flagged, 0/7 benign flagged, $0.13191725. Website https://forgevigil.com, Cloudflare Pages, v0.24.0.
 - Gatekeeper, upstream: https://github.com/lb2002/gatekeeper, Apache-2.0. Billy's fork: https://github.com/billyrdavis1985-bot/gatekeeper, forked 2026-11-10, 198 commits, head `072210e`.
-- Gatekeeper live results, Oct 27-Nov 3, as stated in its README: 48 malicious npm packages confirmed, median flag about 1 minute after publish, median 14 hours before any report, 25 hours before OSV / GitHub / npm listing. Live recall 48% (46/96), 58% since Oct 30 change. Time-split eval: 212 malicious, 590 benign, investigator 66% recall, 0 malicious verdicts on 131 benign. 27 test files, pytest, CI.
-- ControlAnything, for contrast only: arXiv 2611.08321, repo Apolotary/controlanything, 2:11 real Quest 3 demo, five Meta models, N=1 eval, 10 requests, 9/10 ready, no test count stated.
+- Gatekeeper live results, Oct 27-Nov 3, as stated in its README: 48 malicious npm packages confirmed, median flag about 1 minute after publish, median 14 hours before any report, 25 hours before OSV / GitHub / npm listing. Live recall 48% (46/96), 58% since Oct 30 change. Time-split eval: 212 malicious, 590 benign, investigator 66% recall, 0 malicious verdicts on 131 benign. ~~27 test files~~ 26 `test_*.py` files *(replaced 2026-11-11 by Amendment D.1)*, pytest, CI.
+- ControlAnything, for contrast only: arXiv 2611.08321 (paper not independently verified; Amendment D.1, 2026-11-11), repo Apolotary/controlanything, 2:11 real Quest 3 demo, five Meta models, N=1 eval, 10 requests, 9/10 ready, no test count stated.
 
 **Amendment A, 2026-11-10, Billy's words: he will be using special fine-tuned models of his own, not the same models as Gatekeeper.**
 - This amends Phase 2 and every model mention in this plan. Gatekeeper's model set, Muse Spark Open, Muse Spark 1.3, Muse Glimmer 30B, fine-tuned Llama Guard 3 1B, is a reference pattern only, not the model set to use.
@@ -49,7 +49,7 @@ Re-engineering is what makes it different. Copying Gatekeeper's npm monitor into
 - Domain: a supplier document request. One request, one approval registry entry, one document, one recipient.
 - Flow: code denies out-of-scope actors, documents, and recipients before any model call. Muse Spark 1.1, default, receives the request as JSON-encoded untrusted data, may call 3 read-only tools (`lookup_approval`, `get_document_facts`, `get_recipient_facts`), max 4 model calls / 4 tool calls, must answer strict JSON.
 - Decision: only `policy.py` produces ALLOW. BLOCK only when code confirms every cited fact. DENY is permission / scope, no model call. REVIEW is uncertainty / failure, held for a local operator. Fail-closed. Local SQLite outbox only, no supplier email ever sent. Server 127.0.0.1 only.
-- Evidence: receipts `forgevigil.receipt.v6`, hash-chained, local, unencrypted, with fixed claim codes, no message text in new receipts. 370 tests, deliberate-defect checks, CI on Linux and Windows.
+- Evidence: receipts `forgevigil.receipt.v6`, ~~hash-chained~~ append-only (database triggers), not hash-chained *(replaced 2026-11-11 by Amendment D.1)*, local, unencrypted, with fixed claim codes, no message text in new receipts. 370 tests, deliberate-defect checks, CI on Linux and Windows.
 - Strengths: frozen eval rigor, deterministic decider, receipts, a real website, a tight scope that is honest about what it does not do.
 - Limits: single assessor, single model version (Spark 1.1), one-shot verdict, no live traffic, no public ledger, no investigator that can ask for more evidence, no campaign memory.
 
@@ -73,12 +73,12 @@ This is the re-engineering table. The left column is Gatekeeper's pattern. The m
 
 | Gatekeeper pattern | Re-engineered into ForgeVigil | Difference |
 |---|---|---|
-| Metadata triage + static rules + Llama Guard router, ~5% of live npm reaches the models | Stage 0 triage, before Spark: code permission / scope (already exists, keep), plus static rules on the request (approval format, recipient domain, document type, known forgery shapes) and a small local router. Only suspicious or uncertain cases reach Spark 1.3. Clear cases stay code-only. | ForgeVigil's triage is about permission and forgery, not package metadata. The router never allows, it only routes. ALLOW still comes only from `policy.py`. |
+| Metadata triage + static rules + Llama Guard router, ~5% of live npm reaches the models | Stage 0 triage, before Spark: code permission / scope (already exists, keep), plus static rules on the request (approval format, recipient domain, document type, known forgery shapes) and a small local router. ~~Only suspicious or uncertain cases reach Spark 1.3. Clear cases stay code-only.~~ Triage and router signals only add scrutiny; every in-scope request is still assessed, and cost is cut by a cheaper first-pass model, never by skipping assessment *(replaced 2026-11-11 by Amendment D.2.1)*. | ForgeVigil's triage is about permission and forgery, not package metadata. The router never allows, it only routes. ALLOW still comes only from `policy.py`. |
 | Evidence bundle, max 8,000 chars, numbered excerpts | Evidence bundle for a document request: numbered excerpts from the request, the approval registry entry, document facts, and recipient facts, each with a fixed code, no free text beyond the excerpt. Max size frozen in the brief. | Bundle is built by code from trusted stores, not from the untrusted request alone. The model never sees a whole document it was not supposed to see. |
-| Investigator agent, step by step, code-checked claims, `reach.py` | ForgeVigil Investigator, REVIEW cases only, Phase 1: the model may request, one step at a time, `read_approval`, `read_document_facts`, `read_recipient_facts`, `diff_vs_previous_request`, `decode` (base64 / hex / char codes in a quoted line). Code checks every claim: a cited line must exist in the bundle, a registry / document / recipient claim must match the server, and a threat claim must be reachable from the request's install / delivery path. Unproven claims count as unproven, not as evidence. The investigator can clear a flag and stand down. | ForgeVigil's investigator is bounded to 3 read-only tools plus the new read tools, max calls frozen, no shell, no file writes, no network. Gatekeeper's investigator reads an archive; ForgeVigil's reads a permission case. |
-| Spark Open judges, Spark 1.3 second opinion, Glimmer 30B local | Multi-model second opinion, Phase 2: Spark 1.3 assessor, Spark Open second opinion, Glimmer 30B local as the guard model where it runs. Two models agree: stronger signal. They disagree: REVIEW, never an automatic ALLOW or BLOCK. Code still decides. | Glimmer as assessor is NOT GO from Oct 28-30, false positive vs expected REVIEW plus schema failures. Glimmer returns here only as a local guard / second opinion under a new frozen eval, with its own pass bar, not by assumption. If it fails that bar, it stays out. |
+| Investigator agent, step by step, code-checked claims, `reach.py` | ForgeVigil Investigator, ~~REVIEW cases only~~ in-scope requests the assessor called clean (before any outbox write) and REVIEW cases *(replaced 2026-11-11 by Amendment D.2.2)*, Phase 1: the model may request, one step at a time, `read_approval`, `read_document_facts`, `read_recipient_facts`, ~~`diff_vs_previous_request`~~ a diff of structured fields only (document id and version, recipient, approval reference) *(replaced 2026-11-11 by Amendment D.2.3)*, `decode` (base64 / hex / char codes in a quoted line). Code checks every claim: a cited line must exist in the bundle, a registry / document / recipient claim must match the server, and a threat claim must be ~~reachable from the request's install / delivery path~~ checked for delivery-binding reachability: whether it could change what is delivered, given that delivery is bound to registered bytes and destination *(replaced 2026-11-11 by Amendment D.2.4)*. Unproven claims count as unproven, not as evidence. The investigator can clear a flag and stand down; clearing moves BLOCK to REVIEW at most, never to ALLOW *(replaced 2026-11-11 by Amendment D.2.2)*. | ForgeVigil's investigator is bounded to 3 read-only tools plus the new read tools, max calls frozen, no shell, no file writes, no network. Gatekeeper's investigator reads an archive; ForgeVigil's reads a permission case. |
+| Spark Open judges, Spark 1.3 second opinion, Glimmer 30B local | Multi-model second opinion, Phase 2: ~~Spark 1.3 assessor, Spark Open second opinion, Glimmer 30B local as the guard model where it runs~~ the assessor and second-opinion models named under Amendment A, reached through the generic backend *(replaced 2026-11-11 by Amendment D.1, D.5)*. Two models agree: stronger signal. They disagree: REVIEW, never an automatic ALLOW or BLOCK. Code still decides. | Glimmer as assessor is NOT GO from Oct 28-30, false positive vs expected REVIEW plus schema failures. Glimmer returns here only as a local guard / second opinion under a new frozen eval, with its own pass bar, not by assumption. If it fails that bar, it stays out. |
 | Live monitor, npm feed, ~250 changes a minute | Live intake, Phase 3: ForgeVigil has no public feed. Live means operator-submitted requests on the local server, plus a clearly labelled fixture stream for rehearsal. Do not invent a public feed. Measure lead time only against real operator traffic, with operator consent, and say so. | Gatekeeper's live numbers come from a public registry. ForgeVigil's live numbers must come from its own traffic, however small, or they are not live numbers. |
-| Public ledger, `sha256(salt || package, version, flag time)`, OpenTimestamps / Bitcoin | Public receipt ledger, Phase 3: for each verdict, publish hash only, no message text, no document content, no recipient name in the public ledger. `sha256(salt || receipt_id, verdict, flag time)`, OpenTimestamps proof, salt revealed only after independent confirmation or operator release. Local receipts v6 stay the full record. | ForgeVigil's receipts already remove message text in v6. The public ledger is hash-only by design, not a copy of the local receipt. |
+| Public ledger, `sha256(salt || package, version, flag time)`, OpenTimestamps / Bitcoin | ~~Public receipt ledger, Phase 3: for each verdict, publish hash only, no message text, no document content, no recipient name in the public ledger. `sha256(salt || receipt_id, verdict, flag time)`, OpenTimestamps proof, salt revealed only after independent confirmation or operator release. Local receipts v6 stay the full record.~~ Hash-chained local receipts, with optional, opt-in periodic anchoring of the chain head only *(replaced 2026-11-11 by Amendment D.4)*. | ForgeVigil's receipts already remove message text in v6. The public ledger is hash-only by design, not a copy of the local receipt. |
 | Campaign memory: endpoints and accounts remembered, later packages linked | Case memory, Phase 3: remember, locally, recipient domains, approval forgery shapes, and document / recipient pairs that at least two models called malicious, with a human review before any memory entry becomes a rule. Later requests matching a remembered pattern are flagged and linked to the earlier case, and the link is shown to the operator. | Memory is local, operator-reviewed, and never shared by default. No endpoint list is published. A memory hit is a flag, not a BLOCK by itself. |
 | Install guard in front of `npm install` / `npx`, 24 hour hold, fail closed | Delivery guard, Phase 4, only after Phases 1-3 pass: ForgeVigil already is a delivery guard for documents. Generalise, one egress type at a time, each with its own frozen eval: first documents, then agent file sends, then agent installs. Each new egress type needs its own case pack, its own pass bar, and Billy's explicit yes. | The guard does not widen by itself. A new egress type is a new frozen set, not a config change. |
 | `gk audit`, lockfile check, GitHub Action | Audit, Phase 4: `forge-vigil audit` answers "am I already affected?" for the outbox and the approval registry: every outbox item, every approval used, every recipient, checked against known malicious patterns and the case memory, with a clear "unread, not clean" state where a check could not run. | Audit is local, read-only, and never releases anything. It is a report, not a decision. |
@@ -95,29 +95,30 @@ This is the re-engineering table. The left column is Gatekeeper's pattern. The m
 
 ## 5. Phases, with frozen evals and stop rules
 
-Each phase needs its own frozen brief, its own case pack, its own pass bar, and Billy's explicit approve before build starts. A phase that fails its bar does not roll into the next phase.
+Build order: Amendment D.6 (accepted 2026-11-11) replaces the phase order below; the phases keep their
+rules. Each phase needs its own frozen brief, its own case pack, its own pass bar, and Billy's explicit approve before build starts. A phase that fails its bar does not roll into the next phase.
 
 ### Phase 0 — Freeze this plan
 - Deliverable: this v1 plan, approved or amended by Billy.
 - No code. No spend. No model calls.
 - Exit: Billy says "approved" or "amend X", in his own words.
 
-### Phase 1 — Triage + Investigator, REVIEW cases only
+### Phase 1 — Triage + Investigator, ~~REVIEW cases only~~ clean in-scope and REVIEW cases *(replaced 2026-11-11 by Amendment D.2.2)*
 - Build: Stage 0 static triage rules, evidence bundle builder, investigator with bounded read tools, code claim checker, reachability check.
 - Frozen eval: a new frozen set, new name, new amendment log. At least 16 cases, split attacks / benign / scope, like CP21, plus at least 10 investigator-specific cases where the one-shot assessor missed or was uncertain and the investigator must find or clear the flag by reading further.
-- Pass bar, to be frozen before the run: investigator finds at least 8 of 10 one-shot misses, clears at least 8 of 10 false flags, 0 benign cases wrongly BLOCKed, 0 attacks delivered, and every claim cited is code-verified or counted unproven. If any bar fails, the phase is a finding, not a launch.
+- Pass bar, to be frozen before the run: investigator ~~finds at least 8 of 10 one-shot misses~~ recovers one-shot misses against a bar set relative to the measured one-shot baseline, on at least 30 cases per bar, with confidence intervals stated *(replaced 2026-11-11 by Amendment D.3.1)*, clears at least 8 of 10 false flags, 0 benign cases wrongly BLOCKed, 0 attacks delivered, and every claim cited is code-verified or counted unproven. If any bar fails, the phase is a finding, not a launch.
 - Cost: fixture first, $0. Live run only with a fresh spend cap in Billy's own words, a new frozen set, and no tuning from a miss without a new freeze.
 - Exit: Billy reviews the eval report, with misses preserved as disagreements, and says whether Phase 1 ships or is reworked.
 
 ### Phase 2 — Multi-model second opinion, with Billy's own fine-tuned models
 - Build: Billy's own special fine-tuned models, in roles he names before the freeze (router, assessor, investigator, second opinion, local guard). See Amendment A. Gatekeeper's Spark Open / Spark 1.3 / Glimmer / Llama Guard set is a reference pattern only, not the set to use. Spark 1.3 remains a possible assessor upgrade only if Billy names it; it is not assumed.
 - Frozen eval: same case pack as Phase 1, plus a disagreement set where the two models differ. Measure agreement, disagreement rate, and whether disagreement correctly routes to REVIEW. Each fine-tuned model gets its own pass bar.
-- Pass bar, frozen: two-model agreement does not lower the false-positive rate on benign cases, disagreement routes to REVIEW in at least 9 of 10 cases, and no case is ALLOWed on a model vote alone.
+- Pass bar, frozen: two-model agreement does not ~~lower~~ raise the false-positive rate on benign cases *(replaced 2026-11-11 by Amendment D.3.3)*, disagreement routes to REVIEW ~~in at least 9 of 10 cases~~ always, tested as a code property and a deliberate defect *(replaced 2026-11-11 by Amendment D.3.2)*, and no case is ALLOWed on a model vote alone.
 - Glimmer rule: if Glimmer fails its own bar, it stays out. Its earlier NOT GO stands until a new eval passes it. The same rule applies to any of Billy's fine-tuned models: fail the bar, stay out.
 - Exit: Billy approves the model set, or cuts a model.
 
 ### Phase 3 — Public ledger + live measurement
-- Build: hash-only public ledger, OpenTimestamps proof, salt reveal on confirmation, case memory with human review, live numbers page on forgevigil.com, clearly labelled live vs fixture.
+- Build: ~~hash-only public ledger, OpenTimestamps proof, salt reveal on confirmation~~ hash-chained local receipts with optional opt-in anchoring of the chain head *(replaced 2026-11-11 by Amendment D.4)*, case memory with human review, live numbers page on forgevigil.com, clearly labelled live vs fixture.
 - Frozen eval: ledger verification, `gk verify-flag` equivalent, `ots verify` against a Bitcoin block, and a replay of a confirmed case from hash to verdict.
 - Live rule: live numbers are counted only from operator-submitted traffic, with consent, and the count, the window, and the source are stated on the page. No live number is claimed from fixture traffic.
 - Exit: Billy approves the ledger format and the live page wording, or the ledger stays local.
@@ -155,10 +156,11 @@ Each phase needs its own frozen brief, its own case pack, its own pass bar, and 
 
 ---
 
-# Amendment D — proposed 2026-11-11, from review of plan v1 against both repositories
+# Amendment D — proposed and accepted 2026-11-11, from review of plan v1 against both repositories
 
-**Status: proposed.** Nothing below takes effect until the operator accepts it, in whole or by item, in
-his own words. Each item names the v1 line it would change; if accepted, that line is kept struck
+**Status: accepted in whole, 2026-11-11** (D-007; operator's words: "accept Amendment D and freeze the generic
+backend phase"). ~~Status: proposed. Nothing below takes effect until the operator accepts it, in whole or by item, in
+his own words.~~ Each item names the v1 line it would change; if accepted, that line is kept struck
 (`~~like this~~`) with this amendment's date beside it, never silently replaced.
 
 Reviewed against ForgeVigil `b470c40` and Gatekeeper `072210e` (code, not only README).

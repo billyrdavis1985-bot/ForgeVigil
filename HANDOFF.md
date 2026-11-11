@@ -20,15 +20,16 @@ unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is
   Meta Muse, local OpenAI-compatible servers and cloud providers. `meta-muse` is byte-identical to today;
   `local-openai` is loopback-only. 11 spike tests; qualification PASS on Linux 3.11 (382 tests, 295/295).
   Findings: `docs/plans/spike-notes/openai-backend.md` on that branch.
-- **Integration and re-engineering plan v1**: `docs/plans/gatekeeper-integration.md` (PR #33), open, not
-  frozen (D-004). Amendment D is proposed and awaits the operator's acceptance, whole or by item.
+- **Integration plan**: `docs/plans/gatekeeper-integration.md`, open; Amendment D accepted in whole (D-007).
+- **Phase G1, generic backend: frozen** (D-008), brief `docs/plans/phase-g1-generic-backend.md`. Next to
+  build, on a feature branch; done only after the offline pass bar and the operator's local smoke test.
 
 ## Next steps
-1. Governance v2 is in effect (D-005 approved 2026-11-11): agents push their own branches and open pull
-   requests; merges, deployment and spending stay with the operator.
-2. Commit the integration plan as an open plan and amend it (router never skips the assessor,
-   investigator reaches clean in-scope requests, no stored request text, realistic pass bars, ledger fit).
-3. Data and model work follows the plan, with independently authored evaluation sets.
+1. Build Phase G1 to its brief and open one pull request; the operator merges.
+2. Operator: run the G1 smoke test on a local OpenAI-compatible server with one of his models.
+3. Operator settings: require the CI checks on `main` in the GitHub ruleset; decide on Cloudflare
+   per-branch previews (on today, while `website/README.md` says none).
+4. Plan step 0.5: hygiene (REDTEAM F2) and a first consenting pilot operator.
 
 ## Open risks
 1. All 61 shipped evaluation cases and the 16 judged cases are fictional and authored by the operator;
