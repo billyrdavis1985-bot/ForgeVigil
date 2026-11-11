@@ -40,6 +40,8 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
   branches and open pull requests; never merge, never push to `main` or `website`.
 - Becomes approved only when the operator records it here in his own words (for example by editing the
   status line in the merge of this change).
+- Merged to `main` by the operator as PR #29 (`17d067e`) on 2026-11-10. Status remains proposed until
+  the operator records his approval here.
 
 ## D-006 — 2026-11-10 — proposed — POSIX `serve` restart fix
 - Proposes: `reuse_address_for(os.name)` in `forge_vigil/http_api.py` (reuse off on Windows only).
@@ -47,4 +49,9 @@ remain in `docs/history/HANDOFF-through-2026-11-10.md`.
   `tests/test_checkpoint.py::RequestBoundaryTests::test_listening_port_cannot_be_shared` (reuse off for
   Windows and matching the platform, instead of off everywhere) and the mutant "redteam listening port
   shared again" (now edits the helper, same intent). Adds one test and one POSIX mutant.
-- Evidence: Linux qualification PASS on 3.11 and 3.13 (371 tests, 295/295); Windows not yet observed.
+- Evidence: Linux qualification PASS on 3.11 and 3.13 (371 tests, 295/295). Windows qualification on the
+  operator's PC, 2026-11-10: 371 tests (18 skipped), 269/269 runnable defects caught (26 skipped), demo,
+  both drills and cleanup PASS; record
+  `E:\App_Cache\forgevigil-qualification-results-rb98slkv\qualification.json`.
+- Merged to `main` by the operator as PR #29 (`17d067e`) on 2026-11-10. Status remains proposed until
+  the operator records his approval here.
