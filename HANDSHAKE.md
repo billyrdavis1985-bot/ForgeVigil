@@ -43,7 +43,8 @@ answer. If the repository doesn't settle a question, say that instead of guessin
 2. **Q2. Delivery:** what does "delivery" mean in this system, and which kinds of effect are off limits?
 3. **Q3. Release:** how is a held request released, which results can never be released, and where must
    release never be offered?
-4. **Q4. Live calls:** when may a live Muse call run, and how is its spending bounded?
+4. **Q4. Live calls:** when may a live model call run, how is its spending bounded, and what must exist
+   before real request text is sent to a provider?
 5. **Q5. Commits:** who authors commits, with what identity and trailers, and what must exist before any
    commit or push?
 6. **Q6. Message text:** what does the database keep about a request's message, and where can the text itself
@@ -51,15 +52,15 @@ answer. If the repository doesn't settle a question, say that instead of guessin
 7. **Q7. Evidence:** the model reports a threat, but code cannot confirm its evidence. What happens, and why?
 8. **Q8. Key file:** what happens if `<db>.key` is lost, and what should the operator do about it?
 9. **Q9. Failing tests:** after your change a test fails. What must you not do, and what must
-   `tools/mutation_check.py` report before a checkpoint is finished?
-10. **Q10. State:** what did the most recent checkpoint add, and what are the two largest open risks?
+   `tools/mutation_check.py` report before a checkpoint or phase is finished?
+10. **Q10. State:** what is in flight according to `HANDOFF.md`, and what are the two largest open risks?
 
 ## Step 4: say what you will not do
 In one line each, list what AGENTS.md forbids you to do without the operator's explicit approval.
 
 ## Step 5: stop
-End with "Waiting for an assignment." You may list up to three candidate next checkpoints from HANDOFF.md,
-each with its main risk, but start none of them. The operator accepts the handshake, or tells you what
+End with "Waiting for an assignment." You may list up to three candidates from HANDOFF.md or from open
+plan phases (see `docs/plans/README.md`), each with its main risk, but start none of them. The operator accepts the handshake, or tells you what
 didn't match, and then assigns work.
 
 ## Reply format
@@ -78,30 +79,31 @@ HANDSHAKE REPORT
 ```
 
 ## After the handshake: how work is done here
-- **Scope:** one checkpoint at a time, assigned by the operator, with no architecture resets. Every change
-  either fixes a concrete defect or advances the assigned checkpoint. AGENTS.md's Scope section lists what
-  is out of scope, and its Safety section the rules that apply to every delivery: the safety net only
-  grows, and high-risk files are named.
+- **Scope:** an assigned checkpoint, a frozen plan phase, or a spike for an open phase, as AGENTS.md's
+  Scope section defines them, with no architecture resets. AGENTS.md's fixed safety rules apply to every
+  delivery: the safety net only grows, and high-risk files are named.
 - **Every delivery summary states:**
   - the base tree it was built on;
   - every file changed, naming and explaining any high-risk file;
   - the test and deliberate-defect counts before and after;
-  - any existing test or mutant that changed, and why (this needs the operator's approval naming it);
+  - any existing test or mutant that changed, and why (this needs a decision in `DECISIONS.md` naming it);
   - ideas outside the assignment, as proposals only.
 - **A finished checkpoint has:**
   - `CODE_VERSION` bumped in `forge_vigil/versions.py`;
   - tests for the new behaviour;
   - a deliberate-defect entry in `tools/mutation_check.py` for each new safety rule, with every mutant caught;
   - `README.md` and `HANDOFF.md` brought up to date, with observed facts only.
-- **Stack:** Python 3 standard library and `unittest`; no new dependencies without approval. It must stay
-  green on Python 3.11, 3.12 and 3.13, and on Windows.
-- **Delivery:** with the operator's standing approval to push branches, push one and open a pull request,
-  and never merge. Otherwise, deliver a patch built against a stated content tree
+- **Stack:** the core stays Python 3 standard library and `unittest`; optional extensions follow AGENTS.md's
+  "Stack and dependencies". It must stay green on Python 3.11, 3.12 and 3.13, and on Windows (CI legs count).
+- **Delivery:** with the standing grant recorded in `DECISIONS.md`, push your own branch and open a pull
+  request, and never merge. Otherwise, deliver a patch built against a stated content tree
   (`git rev-parse "HEAD^{tree}"`), plus PowerShell cells for the operator's PC (PowerShell 5.1,
   `C:\dev\ForgeVigil`):
   - the apply cell checks the patch's SHA-256 and the starting tree before changing anything;
   - the commit cell checks the resulting tree and re-runs the tests, and commits nothing if they fail;
-  - see "Windows facts" in `HANDOFF.md`, which save hours.
-- **Commits:** only after the operator approves that specific change, authored as
+  - see "Windows facts" in `docs/history/HANDOFF-through-2026-11-10.md`, which save hours.
+- **Commits:** on your own branch under the recorded standing grant, otherwise only after the operator
+  approves that specific change; authored as
   `Billy Davis <245758823+billyrdavis1985-bot@users.noreply.github.com>`, with no trailers.
-- **When you stop:** update `HANDOFF.md` with what you observed, not with what you expect.
+- **When you stop:** update `HANDOFF.md` (current state, one screen) with what you observed, not with what
+  you expect; record decisions only in `DECISIONS.md`.

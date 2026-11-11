@@ -50,7 +50,8 @@ python3 -m forge_vigil demo --review on macOS/Linux, or
 py -3.11 -m forge_vigil demo --review on Windows.
 
 For engineers: [QUALIFICATION.md](QUALIFICATION.md) has the reproducible checks,
-[JUDGMENTS.md](JUDGMENTS.md) the case provenance, and [HANDOFF.md](HANDOFF.md) the full build log.
+[JUDGMENTS.md](JUDGMENTS.md) the case provenance, [HANDOFF.md](HANDOFF.md) the current state, and
+[docs/history/](docs/history/HANDOFF-through-2026-11-10.md) the full build log to 2026-11-10.
 
 **Demo video:** https://youtu.be/2anT6AS-Tcw
 
@@ -88,7 +89,7 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 370 tests (351 product + 19 site); temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 371 tests (352 product + 19 site); temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -557,7 +558,9 @@ Missing or unknown approval never produces ALLOW.
 | `website/` | the forgevigil.com static site, generated with the standard library from the code and recorded results; see [website/README.md](website/README.md) |
 
 Working rules for agents are in [AGENTS.md](AGENTS.md), and an agent joining the work starts with
-[HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md).
+[HANDSHAKE.md](HANDSHAKE.md). Current state and next steps are in [HANDOFF.md](HANDOFF.md), operator
+decisions in [DECISIONS.md](DECISIONS.md), plans in [docs/plans/](docs/plans/README.md), and reused
+third-party work in [PRIOR_WORK.md](PRIOR_WORK.md).
 
 ## How it was built
 

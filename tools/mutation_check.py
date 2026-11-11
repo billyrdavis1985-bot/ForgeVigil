@@ -977,8 +977,12 @@ MUTANTS: tuple[Mutant, ...] = (
            'tests.test_checkpoint.RequestBoundaryTests.test_server_header_names_the_current_version'),
 
     Mutant('redteam listening port shared again', 'forge_vigil/http_api.py',
-           (('    allow_reuse_address = False', '    allow_reuse_address = True'),),
+           (('    return os_name != "nt"', '    return True'),),
            'tests.test_checkpoint.RequestBoundaryTests.test_listening_port_cannot_be_shared'),
+    Mutant('serve cannot restart on its own port', 'forge_vigil/http_api.py',
+           (('    return os_name != "nt"', '    return False'),),
+           'tests.test_checkpoint.RequestBoundaryTests.test_server_restarts_on_the_same_port_after_serving',
+           posix_only=True),
 
     Mutant('redteam foreign database opened for writing', 'forge_vigil/store.py',
            (('        if version is None and tables:', '        if False:'),
