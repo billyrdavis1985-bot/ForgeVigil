@@ -4,28 +4,26 @@ Current state only, one screen. Decisions are in `DECISIONS.md`; history up to 2
 unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is in `CHANGELOG.md`.
 
 ## Main
-- Head: `b470c40` (merged PR #28), version 0.24.0. The hackathon submission was filed at this head and
-  stands as filed; further work builds new versions on top.
-- Inventory: 370 tests (351 product + 19 site), 294 deliberate defects (25 POSIX-only).
-- Last recorded qualification on this inventory: Linux 370 tests, 294/294; operator-supplied Windows
-  370 tests with 17 skips, 269/269 runnable defects. GitHub Actions runs Linux and Windows on 3.11 and 3.13.
+- Head: `17d067e` (merged PR #29: governance v2 and POSIX `serve` restart fix), version 0.24.0. The
+  hackathon submission was filed at `b470c40` and stands as filed; later work builds on top.
+- Inventory: 371 tests (352 product + 19 site), 295 deliberate defects (26 POSIX-only).
+- Qualification on this inventory, 2026-11-10: Linux (cloud workspace, Python 3.11 and 3.13) 371 tests,
+  295/295 caught; operator's Windows PC 371 tests with 18 skipped, 269/269 runnable caught (26 skipped),
+  demo, both drills and cleanup PASS. GitHub Actions result for PR #29: to be confirmed by the operator.
 - Website: forgevigil.com, Cloudflare Pages, built from the `website` branch. Last recorded production
   commit: 202005e. Later merges reach production only when the operator fast-forwards `website`.
 
 ## In flight (not merged)
-- **Governance v2** (this change): new `AGENTS.md`, this one-screen `HANDOFF.md`, `DECISIONS.md`,
-  `PRIOR_WORK.md`, `docs/plans/README.md`, `HANDSHAKE.md` updated to match. No code or test changes.
-- **POSIX `serve` restart fix** (patch on b470c40): `allow_reuse_address` off only on Windows. Changes one
-  existing test assertion and one existing mutant, both named; adds one test and one mutant (371 / 295).
-  Linux qualification PASS on 3.11 and 3.13; Windows not yet observed. Awaiting the operator's decision.
-- **Integration and re-engineering plan v1** (Gatekeeper patterns into ForgeVigil): open, not frozen.
-  Belongs in `docs/plans/` as an open plan when the operator chooses to commit it.
+- **Integration and re-engineering plan v1** (Gatekeeper patterns into ForgeVigil): open, not frozen
+  (D-004). Belongs in `docs/plans/` as an open plan when the operator chooses to commit it.
 
 ## Next steps
-1. Operator reviews and decides on governance v2 and the restart fix (`DECISIONS.md` entries D-005, D-006).
-2. Commit the integration plan as an open plan; amend it (router never skips the assessor, investigator
-   reaches clean in-scope requests, no stored request text, realistic pass bars, ledger fit).
-3. Data and model work (datasets, fine-tuning) follows the plan, with independently authored evaluation sets.
+1. Operator records approval in his own words for D-005 (governance v2, including the standing branch
+   and pull-request grant) and D-006 (restart fix) in `DECISIONS.md`. Until D-005 is approved, agents
+   deliver patches rather than branches.
+2. Commit the integration plan as an open plan and amend it (router never skips the assessor,
+   investigator reaches clean in-scope requests, no stored request text, realistic pass bars, ledger fit).
+3. Data and model work follows the plan, with independently authored evaluation sets.
 
 ## Open risks
 1. All 61 shipped evaluation cases and the 16 judged cases are fictional and authored by the operator;
