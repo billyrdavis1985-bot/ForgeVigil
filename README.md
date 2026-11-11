@@ -89,7 +89,7 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 371 tests (352 product + 19 site); temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 382 tests (363 product + 19 site); temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
