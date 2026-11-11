@@ -17,7 +17,12 @@ re-implements, so that every borrowing is traceable to its source and license.
   (`src/gatekeeper/evidence/bundle.py`, `src/gatekeeper/models/validate.py`), an OpenAI-compatible
   multi-backend model client (`src/gatekeeper/models/backends.py`), structural reachability checks
   (`src/gatekeeper/evidence/reach.py`), campaign memory (`src/gatekeeper/triage/campaign.py`) and
-  lockfile-style audit (`src/gatekeeper/audit.py`). No entry here means no Gatekeeper code is in ForgeVigil.
+  lockfile-style audit (`src/gatekeeper/audit.py`). Patterns already re-implemented are listed below.
 
-## Reused
-- (none yet)
+## Re-implemented patterns
+- **Gatekeeper `src/gatekeeper/models/backends.py`** (Apache-2.0, commit `072210e`): one client for hosted
+  and local OpenAI-compatible model servers. Re-implemented as `forge_vigil/backends.py` (provider
+  profiles over the existing `MuseAssessor`), Phase G1. No Gatekeeper code or text copied.
+
+## Reused code or text
+- (none)

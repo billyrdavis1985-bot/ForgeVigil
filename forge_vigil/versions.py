@@ -1,6 +1,6 @@
 """Version identifiers recorded in every receipt."""
 
-CODE_VERSION = "0.24.0"
+CODE_VERSION = "0.25.0"
 SCAN_SCHEMA_VERSION = "forgevigil.scan.v1"
 DASHBOARD_SCHEMA_VERSION = "forgevigil.dashboard.v1"
 REVIEW_SCHEMA_VERSION = "forgevigil.review.v2"

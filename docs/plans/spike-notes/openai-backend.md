@@ -1,6 +1,8 @@
 # Spike notes: one OpenAI-compatible backend (`spike/openai-backend`)
 
-Status: **spike, never merged** (`AGENTS.md`, Scope). Serves the open plan
+Status: spike. ~~Never merged~~: merged into `main` by PR #35 (`9cd0914`) on 2026-11-11, against the
+spike rule; see D-009. Phase G1 (`docs/plans/phase-g1-generic-backend.md`) builds the production version.
+Original status: **spike, never merged** (`AGENTS.md`, Scope). Serves the open plan
 `docs/plans/gatekeeper-integration.md`, Amendment D, steps D.5 and D.6.1. What this spike teaches goes into the
 plan; any production version needs a frozen phase, its own tests and deliberate defects, and an evaluation.
 

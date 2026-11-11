@@ -1,16 +1,21 @@
-"""SPIKE tests for `forge_vigil/backends.py` (branch `spike/openai-backend`, never merged).
+"""Provider profiles and the generic OpenAI-compatible assessor (`forge_vigil/backends.py`, Phase G1).
 
-They answer the spike's questions against the local fake API only: no key, no network, no spend.
-1. Is the meta-muse profile byte-identical to today's MuseAssessor?
-2. Can a local OpenAI-compatible model (the operator's own fine-tune) run the same assessment, with
-   request text kept on this machine and the receipt naming it?
-3. Do the safety properties hold for every profile: the model still only advises, policy decides,
-   every call is reserved against the spend cap?
+Everything runs against the local fake API: no key, no network, no spend.
+1. The meta-muse profile is byte-identical to today's MuseAssessor (prompts v4 and v5, with and
+   without the truncation retry), so measured Muse evidence still describes this path.
+2. A local OpenAI-compatible model (the operator's own fine-tune) runs the same gate, keeps request
+   text on this machine, and is named in every receipt.
+3. The safety properties hold for every profile: the model only advises, policy decides, scope denials
+   call no model, failures fail closed, every call is reserved against the spend cap.
 """
 
 from __future__ import annotations
 
+import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,17 +27,20 @@ from forge_vigil.backends import (
     BackendConfig,
     OpenAICompatibleAssessor,
     ProviderProfile,
+    live_assessor,
 )
 from forge_vigil.budget import Pricing, parse_usd
+from forge_vigil.demo import run_demo
 from forge_vigil.errors import ConfigError
 from forge_vigil.fixtures import default_fixtures
-from forge_vigil.muse import MuseAssessor, MuseConfig
+from forge_vigil.muse import PREVIOUS_PROMPT_VERSION, PROMPT_VERSION, MuseAssessor, MuseConfig
 from forge_vigil.schema import parse_request
 from forge_vigil.service import ForgeVigilService
 from forge_vigil.store import Store
 from tests import fake_muse as fake
 from tests.support import valid_payload
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_KEY = "test-model-api-key-not-real-0123456789"
 MESSAGES = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
 
@@ -170,6 +178,144 @@ class ConfigTests(unittest.TestCase):
             BackendConfig(profile=lookalike, spend_cap_nanousd=1, pricing=Pricing.from_strings("0", "0"),
                           model="m", base_url="https://models.example.com/v1")
 
+
+
+class MetaMuseConversationParityTests(_BackendTest):
+    """Every request of a whole conversation, for both prompt versions, matches today's MuseAssessor."""
+
+    def run_both(self, script, prompt_version):
+        muse_config = MuseConfig(api_key=TEST_KEY, spend_cap_nanousd=parse_usd("1.00", name="cap"),
+                                 base_url=self.api.base_url, timeout_s=2.0, prompt_version=prompt_version)
+        self.api.requests.clear()
+        self.api.script(*script)
+        old = self.run_service(MuseAssessor(muse_config, self.store, self.fixtures), request_id="req-old")
+        old_requests = [r["body"] for r in self.api.requests]
+        self.api.requests.clear()
+        self.api.script(*script)
+        new = self.run_service(self.backend(META_MUSE, prompt_version=prompt_version), request_id="req-new")
+        new_requests = [r["body"] for r in self.api.requests]
+        return old, new, old_requests, new_requests
+
+    def test_both_prompt_versions_with_tools_and_the_truncation_retry(self):
+        truncated = fake.completion({"role": "assistant", "content": '{"threat_finding": "no'}, finish_reason="length")
+        for prompt_version in (PROMPT_VERSION, PREVIOUS_PROMPT_VERSION):
+            with self.subTest(prompt_version):
+                script = (fake.tool_calls(("lookup_approval", {"approval_ref": "HR-2026-118"})), truncated,
+                          fake.answer())
+                old, new, old_requests, new_requests = self.run_both(script, prompt_version)
+                self.assertEqual(len(new_requests), 3)
+                self.assertEqual(new_requests, old_requests)  # including the request id inside the message
+                self.assertEqual(new_requests[2].get("reasoning_effort"), "low")  # Muse keeps its retry
+                for key in ("disposition", "reason_code", "usage"):
+                    self.assertEqual(new[key], old[key], key)
+                self.assertEqual(new["versions"]["prompt"], prompt_version)
+
+    def run_service(self, assessor, **overrides) -> dict:
+        # A fresh database per run, and the same request id for both runs, so the message text sent to
+        # the model is identical and nothing is answered from an earlier run's receipt.
+        self._runs = getattr(self, "_runs", 0) + 1
+        store = Store(self.tmp / f"parity-{self._runs}.sqlite3")
+        assessor._store = store
+        service = ForgeVigilService(store, assessor, fixtures=self.fixtures)
+        overrides["request_id"] = "req-same"
+        return service.submit("operator", parse_request(json.dumps(valid_payload(**overrides)).encode())).receipt
+
+
+class LocalSafetyTests(_BackendTest):
+    def test_scope_denial_calls_no_model(self):
+        receipt = self.run_service(self.backend(LOCAL_OPENAI), document_id="restricted-cost-sheet")
+        self.assertEqual((receipt["disposition"], receipt["reason_code"]), ("DENY", "DOCUMENT_RESTRICTED"))
+        self.assertEqual(self.api.requests, [])
+        self.assertEqual(self.store.spend_entries(), [])
+
+    def test_malformed_or_failed_local_replies_fail_closed(self):
+        cases = {
+            "not json": fake.completion({"role": "assistant", "content": "I think it is fine."}),
+            "server error": fake.Reply({"error": "boom"}, status=500),
+        }
+        for index, (name, reply) in enumerate(cases.items()):
+            with self.subTest(name):
+                self.api.script(reply)
+                receipt = self.run_service(self.backend(LOCAL_OPENAI), request_id=f"req-fail-{index}")
+                self.assertEqual(receipt["disposition"], "REVIEW")
+                self.assertFalse(receipt["delivered"])
+
+    def test_health_reports_live_for_a_local_model(self):
+        service = ForgeVigilService(self.store, self.backend(LOCAL_OPENAI), fixtures=self.fixtures)
+        self.assertEqual(service.assessor_mode, "live")
+
+
+class LocalSetupTests(unittest.TestCase):
+    BASE = {"FORGEVIGIL_LOCAL_BASE_URL": "http://127.0.0.1:8080/v1", "FORGEVIGIL_LOCAL_MODEL": "billy-ft-1",
+            "FORGEVIGIL_SPEND_CAP_USD": "0.01"}
+
+    def test_local_settings_come_from_the_environment_without_a_key(self):
+        config = BackendConfig.local_from_env(self.BASE)
+        self.assertIs(config.profile, LOCAL_OPENAI)
+        self.assertEqual((config.model, config.base_url, config.api_key), ("billy-ft-1", "http://127.0.0.1:8080/v1", ""))
+        self.assertEqual(config.spend_cap_nanousd, 10_000_000)
+        self.assertEqual(config.pricing.cost_nanousd(1000, 1000), 0)
+
+    def test_local_settings_refuse_an_off_machine_server(self):
+        for url in ("https://models.example.com/v1", "http://10.0.0.5:8080/v1", "https://192.168.1.2/v1",
+                    "ftp://127.0.0.1/v1"):
+            with self.subTest(url), self.assertRaises(ConfigError):
+                BackendConfig.local_from_env({**self.BASE, "FORGEVIGIL_LOCAL_BASE_URL": url})
+
+    def test_local_settings_refuse_missing_or_bad_values(self):
+        bad = {
+            "no url": {k: v for k, v in self.BASE.items() if k != "FORGEVIGIL_LOCAL_BASE_URL"},
+            "no model": {k: v for k, v in self.BASE.items() if k != "FORGEVIGIL_LOCAL_MODEL"},
+            "no cap": {k: v for k, v in self.BASE.items() if k != "FORGEVIGIL_SPEND_CAP_USD"},
+            "zero cap": {**self.BASE, "FORGEVIGIL_SPEND_CAP_USD": "0"},
+            "path-like model": {**self.BASE, "FORGEVIGIL_LOCAL_MODEL": "../model"},
+        }
+        for name, env in bad.items():
+            with self.subTest(name), self.assertRaises(ConfigError):
+                BackendConfig.local_from_env(env)
+
+    def test_cli_refuses_local_mode_before_any_network_use(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("FORGEVIGIL_LOCAL_")}
+        cases = {"no settings": env,
+                 "off machine": {**env, **self.BASE, "FORGEVIGIL_LOCAL_BASE_URL": "https://models.example.com/v1"}}
+        for name, case_env in cases.items():
+            with self.subTest(name):
+                proc = subprocess.run([sys.executable, "-B", "-m", "forge_vigil", "demo", "--assessor", "local"],
+                                      cwd=REPO_ROOT, env=case_env, capture_output=True, text=True, timeout=60)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertIn("refusing to start", proc.stderr)
+
+    def test_eval_does_not_offer_local_mode(self):
+        proc = subprocess.run([sys.executable, "-B", "-m", "forge_vigil", "eval", "--assessor", "local"],
+                              cwd=REPO_ROOT, capture_output=True, text=True, timeout=60)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("invalid choice", proc.stderr)
+
+
+class LocalDemoTests(_BackendTest):
+    def test_local_demo_runs_end_to_end_and_names_the_model(self):
+        # What the operator's smoke test runs against a real local server, here against the fake one.
+        self.api.script(fake.answer(), fake.answer())  # ALLOW case, then REVIEW case; DENY never calls
+        config = BackendConfig.local_from_env({"FORGEVIGIL_LOCAL_BASE_URL": self.api.base_url,
+                                               "FORGEVIGIL_LOCAL_MODEL": "billy-ft-1",
+                                               "FORGEVIGIL_SPEND_CAP_USD": "0.01"})
+        out = io.StringIO()
+        self.assertEqual(run_demo(out=out, live_config=config), 0, out.getvalue())
+        text = out.getvalue()
+        self.assertIn("live assessor local.billy-ft-1", text)
+        self.assertIn("RESULT: PASS", text)
+        self.assertEqual(len(self.api.requests), 2)
+        self.assertTrue(all("authorization" not in r["headers"] for r in self.api.requests))
+
+
+class FactoryTests(_BackendTest):
+    def test_the_factory_keeps_muse_on_its_own_class(self):
+        muse = MuseConfig(api_key=TEST_KEY, spend_cap_nanousd=1, base_url=self.api.base_url)
+        self.assertIs(type(live_assessor(muse, self.store, self.fixtures)), MuseAssessor)
+        local = BackendConfig.for_profile(LOCAL_OPENAI, spend_cap_nanousd=1, model="m", base_url=self.api.base_url)
+        self.assertIs(type(live_assessor(local, self.store, self.fixtures)), OpenAICompatibleAssessor)
+        with self.assertRaises(TypeError):
+            live_assessor(object(), self.store, self.fixtures)
 
 if __name__ == "__main__":
     unittest.main()

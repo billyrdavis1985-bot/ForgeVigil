@@ -1,27 +1,35 @@
-"""SPIKE (branch `spike/openai-backend`, never merged): one assessor for any OpenAI-compatible provider.
+"""Provider profiles for the live assessor (Phase G1, `docs/plans/phase-g1-generic-backend.md`).
 
-Purpose: learn what it takes to run ForgeVigil's assessor on models other than Meta's Muse (the
-operator's own fine-tuned models on a local llama.cpp / vLLM server, or a cloud provider) without
-touching `policy.py`, `muse.py`'s prompts, or anything downstream of the assessor interface.
-
-`MuseAssessor` already speaks OpenAI-compatible `/chat/completions`. What is Meta-specific is small and
+`MuseAssessor` speaks OpenAI-compatible `/chat/completions`. What differs between providers is small and
 lives in a `ProviderProfile`: how structured output is requested, whether `reasoning_effort` is sent,
 which field carries the output-token limit, whether an API key is required, whether request text may
 leave the machine, and default prices. Everything else (the bounded tool loop, spend reservations,
-answer validation, evidence checking, policy) is reused unchanged.
+answer validation, evidence checking, policy) is `MuseAssessor`'s, unchanged.
 
-The model can still only advise: replies go through the same `_answer` validation and the same
-`policy.py`, and receipts record the profile in `adapter_id` (for example `local.my-model`).
+Profiles:
+- `meta-muse`: today's Meta Model API request, byte for byte (tests/test_backends.py, parity tests).
+- `local-openai`: the operator's own model on a local OpenAI-compatible server (llama.cpp
+  `llama-server`, vLLM, Ollama). Loopback only, so request text never leaves the machine; no key; zero
+  price, with every call still reserved against the spend cap.
+- `cloud-openai`: defined but not selectable from the command line (D-008: out of scope until a
+  provider is named with a data-flow note and the operator's opt-in).
+
+The model still only advises: replies go through `MuseAssessor._answer` and then `policy.py`, and every
+receipt names the profile and model in `assessment.adapter_id` (for example `local.my-model`).
+
+Pattern from Gatekeeper `src/gatekeeper/models/backends.py` (Apache-2.0, 072210e), re-implemented; see
+PRIOR_WORK.md.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Mapping
 from urllib.parse import urlsplit
 
-from .budget import Pricing
+from .budget import Pricing, parse_usd
 from .errors import ConfigError
 from .investigation import TOOL_SPECS
 from .muse import (
@@ -32,12 +40,17 @@ from .muse import (
     DEFAULT_MODEL,
     DEFAULT_OUTPUT_USD_PER_MILLION,
     PROMPT_VERSION,
+    SPEND_CAP_ENV_VAR,
     SYSTEM_PROMPTS,
     MuseAssessor,
+    MuseConfig,
     _MODEL_ID,
     _check_base_url,
     _is_loopback,
 )
+
+LOCAL_BASE_URL_ENV_VAR = "FORGEVIGIL_LOCAL_BASE_URL"
+LOCAL_MODEL_ENV_VAR = "FORGEVIGIL_LOCAL_MODEL"
 
 STRUCTURED_OUTPUT_MODES = ("json_schema", "json_object", "none")
 MAX_TOKENS_FIELDS = ("max_tokens", "max_completion_tokens")
@@ -66,7 +79,6 @@ class ProviderProfile:
             raise ConfigError(f"unknown max tokens field {self.max_tokens_field!r}")
 
 
-# Today's behaviour, byte for byte (see tests/test_backends.py, parity tests).
 META_MUSE = ProviderProfile(
     name="meta-muse",
     adapter_prefix="muse",
@@ -81,9 +93,6 @@ META_MUSE = ProviderProfile(
     default_output_usd_per_million=DEFAULT_OUTPUT_USD_PER_MILLION,
 )
 
-# The operator's own models on a local OpenAI-compatible server (llama.cpp `llama-server`, vLLM, ...).
-# Loopback only, so request text never leaves the machine; no key; zero price, but every call is still
-# reserved against the spend cap so the ledger stays complete.
 LOCAL_OPENAI = ProviderProfile(
     name="local-openai",
     adapter_prefix="local",
@@ -96,8 +105,9 @@ LOCAL_OPENAI = ProviderProfile(
     default_output_usd_per_million="0",
 )
 
-# A hosted OpenAI-compatible provider. Prices have no default: the operator states them, because spend
-# reservations are only as good as the prices behind them.
+# A hosted OpenAI-compatible provider. Present since the spike merge (PR #35), but deliberately not
+# selectable from the command line: D-008 keeps it out of scope until a provider is named with a
+# data-flow note and the operator's opt-in. Prices have no default; reservations need real prices.
 CLOUD_OPENAI = ProviderProfile(
     name="cloud-openai",
     adapter_prefix="cloud",
@@ -132,18 +142,18 @@ class BackendConfig:
         profile = self.profile
         if PROFILES.get(profile.name) is not profile:
             raise ConfigError(f"unknown provider profile {profile.name!r}")
-        if profile.requires_api_key and (not self.api_key or any(ch.isspace() for ch in self.api_key)):
+        if profile.requires_api_key and not self.api_key:
             raise ConfigError(f"the {profile.name} provider needs an API key")
         if self.api_key and any(ch.isspace() for ch in self.api_key):
-            raise ConfigError("API key is malformed")
+            raise ConfigError("the API key is malformed")  # never echo the key
         if self.spend_cap_nanousd <= 0:
-            raise ConfigError("live mode needs a positive spend cap, even for a local model")
+            raise ConfigError(f"live mode needs a positive spend cap ({SPEND_CAP_ENV_VAR}), even for a local model")
         if not _MODEL_ID.fullmatch(self.model):
             raise ConfigError("model id may only contain letters, digits, '.', '_' and '-'")
         if profile.loopback_only:
             parts = urlsplit(self.base_url)
             if parts.scheme not in ("http", "https") or not _is_loopback(parts.hostname):
-                raise ConfigError(f"the {profile.name} provider must be on this machine (loopback address)")
+                raise ConfigError(f"the {profile.name} provider must be on this machine (a loopback address)")
         _check_base_url(self.base_url)
         if not 0 < self.timeout_s <= 300:
             raise ConfigError("timeout must be between 0 and 300 seconds")
@@ -164,12 +174,12 @@ class BackendConfig:
         pricing: Pricing | None = None,
         **settings,
     ) -> "BackendConfig":
-        """Fill in the profile's defaults; refuse where it has none (model, URL, cloud prices)."""
+        """Fill in the profile's defaults; refuse where it has none."""
         model = model or profile.default_model
         base_url = base_url or profile.default_base_url
-        if model is None:
+        if not model:
             raise ConfigError(f"the {profile.name} provider needs a model id")
-        if base_url is None:
+        if not base_url:
             raise ConfigError(f"the {profile.name} provider needs a base URL")
         if pricing is None:
             if profile.default_input_usd_per_million is None or profile.default_output_usd_per_million is None:
@@ -178,6 +188,22 @@ class BackendConfig:
                                            profile.default_output_usd_per_million)
         return cls(profile=profile, spend_cap_nanousd=spend_cap_nanousd, pricing=pricing, model=model,
                    base_url=base_url, **settings)
+
+    @classmethod
+    def local_from_env(cls, environ: Mapping[str, str] | None = None) -> "BackendConfig":
+        """`--assessor local`: a model on a local OpenAI-compatible server, configured from the environment."""
+        env = os.environ if environ is None else environ
+        for name in (LOCAL_BASE_URL_ENV_VAR, LOCAL_MODEL_ENV_VAR):
+            if not env.get(name):
+                raise ConfigError(f"{name} is not set; --assessor local needs it")
+        if not env.get(SPEND_CAP_ENV_VAR):
+            raise ConfigError(f"{SPEND_CAP_ENV_VAR} is not set; live mode needs an explicit spend cap in USD")
+        return cls.for_profile(
+            LOCAL_OPENAI,
+            spend_cap_nanousd=parse_usd(env[SPEND_CAP_ENV_VAR], name=SPEND_CAP_ENV_VAR),
+            model=env[LOCAL_MODEL_ENV_VAR],
+            base_url=env[LOCAL_BASE_URL_ENV_VAR],
+        )
 
 
 class OpenAICompatibleAssessor(MuseAssessor):
@@ -189,7 +215,7 @@ class OpenAICompatibleAssessor(MuseAssessor):
 
     def _body(self, messages: list[dict], reasoning_effort: str | None = None) -> bytes:
         profile = self.config.profile
-        # Key order matches MuseAssessor._body, so the meta-muse profile is byte-identical to today.
+        # Key order matches MuseAssessor._body, so the meta-muse profile is byte-identical to it.
         payload: dict = {
             "model": self.config.model,
             "messages": messages,
@@ -213,3 +239,13 @@ class OpenAICompatibleAssessor(MuseAssessor):
         if not self.config.api_key:
             headers.pop("Authorization")  # never send "Bearer " with an empty key
         return headers
+
+
+def live_assessor(config, store, fixtures, transport=None):
+    """The live assessor for a validated config: `MuseConfig` (`--assessor muse`, unchanged) or
+    `BackendConfig` (`--assessor local`)."""
+    if isinstance(config, BackendConfig):
+        return OpenAICompatibleAssessor(config, store, fixtures, transport)
+    if isinstance(config, MuseConfig):
+        return MuseAssessor(config, store, fixtures, transport)
+    raise TypeError(f"no live assessor for {type(config).__name__}")

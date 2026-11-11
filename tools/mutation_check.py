@@ -1017,6 +1017,25 @@ MUTANTS: tuple[Mutant, ...] = (
            (('        except OSError as exc:\n            import errno\n', '        except OSError as exc:\n            raise\n'),),
            'tests.test_checkpoint.RequestBoundaryTests.test_serve_refuses_a_busy_port_without_a_traceback'),
 
+    # Phase G1, generic backend (docs/plans/phase-g1-generic-backend.md).
+    Mutant('g1 local backend loopback check removed', 'forge_vigil/backends.py',
+           (('        if profile.loopback_only:\n', '        if False:\n'),),
+           'tests.test_backends.LocalProfileTests.test_request_text_cannot_leave_the_machine'),
+    Mutant('g1 reasoning effort sent where unsupported', 'forge_vigil/backends.py',
+           ((' and profile.supports_reasoning_effort:', ':'),),
+           'tests.test_backends.LocalProfileTests.test_truncation_retry_happens_without_reasoning_effort'),
+    Mutant('g1 empty key sent as a bearer header', 'forge_vigil/backends.py',
+           (('            headers.pop("Authorization")  # never send "Bearer " with an empty key\n', '            pass\n'),),
+           'tests.test_backends.LocalProfileTests.test_request_shape_has_no_key_no_schema_object_and_no_reasoning_effort'),
+    Mutant('g1 meta-muse request drifts from today', 'forge_vigil/backends.py',
+           (('        payload[profile.max_tokens_field] = self.config.max_output_tokens\n',
+             '        payload[profile.max_tokens_field] = self.config.max_output_tokens\n'
+             '        payload["tool_choice"] = payload.pop("tool_choice")\n'),),
+           'tests.test_backends.MetaMuseParityTests.test_request_bytes_and_headers_are_identical'),
+    Mutant('g1 local profile allowed off the machine', 'forge_vigil/backends.py',
+           (('    loopback_only=True,\n', '    loopback_only=False,\n'),),
+           'tests.test_backends.LocalSetupTests.test_local_settings_refuse_an_off_machine_server'),
+
 )
 
 

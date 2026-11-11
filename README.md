@@ -89,7 +89,7 @@ Use [Local operation and state](#local-operation-and-state) for a persistent dev
 These POSIX commands can run independently on disposable state:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v   # 382 tests (363 product + 19 site); temporary state, no provider calls or spend
+python3 -m unittest discover -s tests -t . -v   # 393 tests (374 product + 19 site); temporary state, no provider calls or spend
 python3 -m forge_vigil demo                      # ALLOW / DENY / REVIEW smoke demo, fixture assessor
 python3 -m forge_vigil eval                      # labelled evaluation, fixture baseline (flags nothing)
 python3 -m forge_vigil demo --review             # the demo, ending with the operator releasing the held case
@@ -212,6 +212,30 @@ At the end it prints the spend that was recorded.
 - HTTPS only. Plain HTTP is allowed only for a loopback test server.
 - Redirects are refused, so the key can't be forwarded to another host.
 - Responses are size-capped, and each socket operation has a timeout.
+
+## Local models (Phase G1)
+
+`serve` and `demo` can run the live assessor on your own model served by a local OpenAI-compatible server
+(for example llama.cpp `llama-server`, vLLM or Ollama) on the same machine. It is the same gate: the
+model only advises, `policy.py` decides, scope denials call no model, and failures are held for REVIEW.
+
+| Setting | Meaning |
+|---|---|
+| `FORGEVIGIL_LOCAL_BASE_URL` | Required. The server's OpenAI-compatible base URL, for example `http://127.0.0.1:8080/v1`. Only loopback addresses are accepted, so request text never leaves this machine. |
+| `FORGEVIGIL_LOCAL_MODEL` | Required. The model id the server expects. Receipts record it as `local.<model>`. |
+| `FORGEVIGIL_SPEND_CAP_USD` | Required, as for Muse. Local calls are priced at zero but still reserved and settled, so the ledger stays complete. |
+
+```powershell
+$env:FORGEVIGIL_LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
+$env:FORGEVIGIL_LOCAL_MODEL = "my-model"
+$env:FORGEVIGIL_SPEND_CAP_USD = "0.01"
+.\.venv\Scripts\python.exe -m forge_vigil demo --assessor local
+```
+
+No API key is needed or sent. The request uses `response_format` `json_object` and never `reasoning_effort`;
+`--assessor muse` is unchanged, byte for byte. `eval` does not offer `local`: a local model's detection quality
+needs its own frozen evaluation before any of its verdicts count. See `forge_vigil/backends.py` and
+`docs/plans/phase-g1-generic-backend.md`.
 
 ## Evaluation (Checkpoints 03 and 06)
 
