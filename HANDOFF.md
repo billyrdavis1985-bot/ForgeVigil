@@ -4,25 +4,28 @@ Current state only, one screen. Decisions are in `DECISIONS.md`; history up to 2
 unchanged in `docs/history/HANDOFF-through-2026-11-10.md`; checkpoint history is in `CHANGELOG.md`.
 
 ## Main
-- Head: `0ab4b95` (merged PR #36: Amendment D accepted, D-007; Phase G1 frozen, D-008), version 0.24.0.
-  PR #35 (`9cd0914`) merged the `spike/openai-backend` work into `main`, against the "spikes are never
-  merged" rule; D-009 (proposed) records it and accepts it as G1's starting point. The hackathon submission
-  was filed at `b470c40` and stands as filed.
-- Inventory on main: 382 tests (363 product + 19 site), 295 deliberate defects (26 POSIX-only).
-- GitHub Actions on `main`: `offline-qualification` (Linux and Windows, Python 3.11 and 3.13) and
-  `website-build` green through `34fb1f0`.
+- Head: `fc771b3` (merged PR #37: Phase G1, generic OpenAI-compatible backend, `--assessor local`),
+  version 0.25.0. PR #35 (`9cd0914`) merged the `spike/openai-backend` work into `main`, against the
+  "spikes are never merged" rule; D-009 records it and accepts it as G1's starting point (still marked
+  proposed in `DECISIONS.md`). The hackathon submission was filed at `b470c40` and stands as filed.
+- Inventory on main: 393 tests (374 product + 19 site), 300 deliberate defects (26 POSIX-only)
+  (`tools/handshake.py` at `fc771b3`).
+- GitHub Actions on `main`: `offline-qualification` (Linux and Windows, Python 3.11 and 3.13),
+  `website-build` and Cloudflare Pages green at `fc771b3`.
 - Website: forgevigil.com, Cloudflare Pages, built from the `website` branch. Last recorded production
   commit: 202005e. Later merges reach production only when the operator fast-forwards `website`.
 
 ## In flight (not merged)
-- **Phase G1, generic backend** (branch `phase-g1-generic-backend`, version 0.25.0): `--assessor local`
-  for `serve` and `demo`, production `forge_vigil/backends.py`, 393 tests / 300 deliberate defects.
-  Offline pass bar observed in the cloud workspace (see the pull request). Not done until the operator's
-  local smoke test passes (brief, "Operator smoke test").
+- **Sample dashboard fonts** (branch `fix-demo-dashboard-fonts`): on forgevigil.com, `/demo-dashboard`'s own
+  meta policy (`default-src 'none'; style-src 'self'`) blocked the site stylesheet's five IBM Plex fonts.
+  `website/build.py` now adds `font-src 'self'`; new site test; 394 tests (374 product + 20 site).
+  Reaches production only when the operator fast-forwards `website`.
+- **Phase G1** is merged (PR #37) but not done until the operator's local smoke test passes (brief,
+  "Operator smoke test").
 - **Integration plan**: `docs/plans/gatekeeper-integration.md`, open; Amendment D accepted in whole (D-007).
 
 ## Next steps
-1. Operator reviews and merges the G1 pull request (and approves D-009 by merging it).
+1. Operator reviews and merges the sample dashboard fonts pull request, then moves `website` to publish it.
 2. Operator: G1 smoke test, `demo --assessor local` against one of his models on a local
    OpenAI-compatible server, fictional fixtures only; record the result here.
 3. Operator settings: require the CI checks on `main` in the GitHub ruleset; decide on Cloudflare

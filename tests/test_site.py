@@ -161,6 +161,18 @@ class SiteBuildTests(unittest.TestCase):
         self.assertIn('<a href="/">Back to forgevigil.com</a>', page)
         self.assertLess(page.index(label), page.index("<h2>"))
 
+    def test_sample_dashboard_meta_policy_allows_the_site_fonts(self):
+        # Browsers enforce the page's meta policy and the _headers policy together. Without font-src,
+        # the meta policy blocked the site stylesheet's self-hosted fonts on the live page.
+        page = (self.out / "demo-dashboard.html").read_text(encoding="utf-8")
+        meta = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]*)">', page)
+        self.assertIsNotNone(meta, "sample dashboard keeps its meta policy")
+        directives = [d.strip() for d in meta.group(1).split(";")]
+        self.assertIn("default-src 'none'", directives)
+        self.assertIn("style-src 'self'", directives)
+        self.assertIn("font-src 'self'", directives)
+        self.assertNotIn("unsafe-inline", meta.group(1))
+
     def test_limits_entries_keep_title_and_body_apart(self):
         page = (self.out / "limits.html").read_text(encoding="utf-8")
         self.assertNotRegex(page, r"</b>[A-Z]")

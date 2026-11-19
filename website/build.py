@@ -727,7 +727,8 @@ def sample_dashboard_for_site(raw: str, stylesheet: str) -> str:
 
     The local export carries its own inline stylesheet, which the site's
     `style-src 'self'` header forbids. The transform swaps it for the site's
-    fingerprinted stylesheet, drops the meta policy's `unsafe-inline`, and
+    fingerprinted stylesheet, drops the meta policy's `unsafe-inline` (allowing the stylesheet's
+    self-hosted fonts instead), and
     labels the page a fictional example with a way back to the site.
     """
     styled, found = re.subn(r"<style>.*?</style>", "", raw, count=1, flags=re.DOTALL)
@@ -735,7 +736,9 @@ def sample_dashboard_for_site(raw: str, stylesheet: str) -> str:
         raise SystemExit("sample dashboard has no <style> block to replace")
     page = styled.replace("</head>",
                           f'<link rel="stylesheet" href="{stylesheet}">\n</head>', 1)
-    page = page.replace("style-src 'unsafe-inline'", "style-src 'self'")
+    # The meta policy is enforced together with the site's header policy, so it must also allow
+    # the site stylesheet's self-hosted fonts; without font-src the browser refused all of them.
+    page = page.replace("style-src 'unsafe-inline'", "style-src 'self'; font-src 'self'")
     label = ('<p class="sample-note"><strong>Fictional static example, not real traffic.</strong> '
              '<a href="/">Back to forgevigil.com</a></p>\n')
     marker = "<h1>ForgeVigil dashboard</h1>"
